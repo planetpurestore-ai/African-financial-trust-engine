@@ -1,7 +1,10 @@
 import sqlite3
 from pathlib import Path
 
-DATABASE_PATH = Path("trust_engine.db")
+# Always keep the SQLite database beside the repository's app package,
+# regardless of the directory from which Uvicorn is started.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATABASE_PATH = PROJECT_ROOT / "trust_engine.db"
 
 
 def get_connection():
