@@ -143,3 +143,43 @@ def get_evidence(evidence_id: str):
         "status": "found",
         "evidence": dict(row),
     }
+
+
+@app.post("/verify-stored/{invoice_number}/{evidence_id}")
+def verify_stored(invoice_number: str, evidence_id: str):
+    connection = get_connection()
+
+    invoice_row = connection.execute(
+        "SELECT * FROM invoices WHERE invoice_number = ?",
+        (invoice_number,),
+    ).fetchone()
+
+    evidence_row = connection.execute(
+        "SELECT * FROM evidence WHERE evidence_id = ?",
+        (evidence_id,),
+    ).fetchone()
+
+    connection.close()
+
+    if invoice_row is None:
+        return {
+            "status": "error",
+            "message": "Invoice not found",
+        }
+
+    if evidence_row is None:
+        return {
+            "status": "error",
+            "message": "Evidence not found",
+        }
+
+    invoice = Invoice(**dict(invoice_row))
+    evidence = Evidence(**dict(evidence_row))
+
+    result = compare_invoice_to_evidence(invoice, evidence)
+
+    return {
+        "invoice_number": invoice_number,
+        "evidence_id": evidence_id,
+        "verification": result,
+    }
