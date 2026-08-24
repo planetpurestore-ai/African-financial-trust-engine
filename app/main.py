@@ -183,3 +183,50 @@ def verify_stored(invoice_number: str, evidence_id: str):
         "evidence_id": evidence_id,
         "verification": result,
     }
+
+
+@app.post("/verification-summary/{invoice_number}/{evidence_id}")
+def verification_summary(invoice_number: str, evidence_id: str):
+    connection = get_connection()
+
+    invoice_row = connection.execute(
+        "SELECT * FROM invoices WHERE invoice_number = ?",
+        (invoice_number,),
+    ).fetchone()
+
+    evidence_row = connection.execute(
+        "SELECT * FROM evidence WHERE evidence_id = ?",
+        (evidence_id,),
+    ).fetchone()
+
+    connection.close()
+
+    if invoice_row is None:
+        return {"status": "error", "message": "Invoice not found"}
+
+    if evidence_row is None:
+        return {"status": "error", "message": "Evidence not found"}
+
+    invoice = Invoice(**dict(invoice_row))
+    evidence = Evidence(**dict(evidence_row))
+
+    result = compare_invoice_to_evidence(invoice, evidence)
+
+    passed = result["passed_checks"]
+    total = result["total_checks"]
+
+    if passed == total:
+        decision = "verified"
+    elif passed == 0:
+        decision = "rejected"
+    else:
+        decision = "review_required"
+
+    return {
+        "invoice_number": invoice_number,
+        "evidence_id": evidence_id,
+        "decision": decision,
+        "passed_checks": passed,
+        "total_checks": total,
+        "checks": result["checks"],
+    }
