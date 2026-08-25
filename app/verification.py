@@ -1,6 +1,8 @@
 from app.models import Invoice
 from app.evidence import Evidence
 
+CHECK_NAMES = ("supplier_match", "buyer_match", "amount_match", "currency_match")
+
 
 def _normalize_text(value: str | None) -> str | None:
     if value is None:
@@ -8,7 +10,7 @@ def _normalize_text(value: str | None) -> str | None:
     return " ".join(value.strip().casefold().split()) or None
 
 
-def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict:
+def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool]:
     invoice_supplier = _normalize_text(invoice.supplier_name)
     invoice_buyer = _normalize_text(invoice.buyer_name)
     evidence_supplier = _normalize_text(evidence.supplier_name)
@@ -22,79 +24,22 @@ def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict:
     }
 
 
-def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
-    """Compare an invoice with one piece of evidence using explainable checks."""
-    checks = _checks_for_evidence(invoice, evidence)
-    passed = sum(checks.values())
-    total = len(checks)
-    failed_checks = [name for name, passed_check in checks.items() if not passed_check]
-    score = round((passed / total) * 100, 2) if total else 0.0
-
-    return {
-        "status": "verified" if passed == total else "review_required",
-        "checks": checks,
-        "failed_checks": failed_checks,
-        "passed_checks": passed,
-        "total_checks": total,
-        "verification_score": score,
-    }
-
-
-def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
-    """Aggregate multiple evidence records into one explainable verification result."""
-    if not evidence_items:
-        return {
-            "status": "review_required",
-            "checks": {
-                "supplier_match": False,
-                "buyer_match": False,
-                "amount_match": False,
-                "currency_match": False,
-            },
-            "failed_checks": [
-                "supplier_match",
-                "buyer_match",
-                "amount_match",
-                "currency_match",
-            ],
-            "passed_checks": 0,
-            "total_checks": 4,
-            "verification_score": 0.0,
-            "evidence_count": 0,
-            "supporting_evidence": {},
-        }
-
-    checks_by_evidence = {
-        item.evidence_id: _checks_for_evidence(invoice, item)
-        for item in evidence_items
-    }
-
+def _aggregate(checks_by_evidence: dict[str, dict[str, bool]]) -> dict:
     checks = {
-        check_name: any(
-            evidence_checks[check_name]
-            for evidence_checks in checks_by_evidence.values()
-        )
-        for check_name in (
-            "supplier_match",
-            "buyer_match",
-            "amount_match",
-            "currency_match",
-        )
+        check_name: any(item.get(check_name, False) for item in checks_by_evidence.values())
+        for check_name in CHECK_NAMES
     }
-
     supporting_evidence = {
         check_name: [
             evidence_id
             for evidence_id, evidence_checks in checks_by_evidence.items()
-            if evidence_checks[check_name]
+            if evidence_checks.get(check_name, False)
         ]
-        for check_name in checks
+        for check_name in CHECK_NAMES
     }
-
     passed = sum(checks.values())
-    total = len(checks)
+    total = len(CHECK_NAMES)
     failed_checks = [name for name, passed_check in checks.items() if not passed_check]
-
     return {
         "status": "verified" if passed == total else "review_required",
         "checks": checks,
@@ -102,6 +47,22 @@ def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evide
         "passed_checks": passed,
         "total_checks": total,
         "verification_score": round((passed / total) * 100, 2),
-        "evidence_count": len(evidence_items),
+        "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
     }
+
+
+def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
+    """Compare an invoice with one piece of evidence using explainable checks."""
+    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)})
+
+
+def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
+    """Aggregate multiple evidence records into one explainable verification result."""
+    if not evidence_items:
+        return _aggregate({}) | {"evidence_count": 0}
+    checks_by_evidence = {
+        item.evidence_id: _checks_for_evidence(invoice, item)
+        for item in evidence_items
+    }
+    return _aggregate(checks_by_evidence)
