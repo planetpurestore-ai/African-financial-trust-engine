@@ -47,7 +47,7 @@ def test_multiple_evidence_items_can_combine_to_verify_invoice():
     assert result["supporting_evidence"]["currency_match"] == ["PAY-100"]
 
 
-def test_conflicting_evidence_does_not_hide_the_conflict():
+def test_conflicting_evidence_requires_review():
     result = compare_invoice_to_evidence_set(
         invoice(),
         [
@@ -72,5 +72,7 @@ def test_conflicting_evidence_does_not_hide_the_conflict():
         ],
     )
 
-    assert result["status"] == "verified"
-    assert result["supporting_evidence"]["amount_match"] == ["PO-102"]
+    assert result["status"] == "review_required"
+    assert result["verification_score"] == 100.0
+    assert result["conflicts"] == ["amount_match"]
+    assert "conflict:amount_match" in result["failed_checks"]
