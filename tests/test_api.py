@@ -1,44 +1,59 @@
-from datetime import date
-from decimal import Decimal
-
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.database import DATABASE_PATH
 
 
 client = TestClient(app)
 
 
+def _invoice(invoice_number="API-INV-001"):
+    return {
+        "invoice_number": invoice_number,
+        "supplier_name": "Supplier Ltd",
+        "buyer_name": "Buyer Ltd",
+        "amount": "10000.00",
+        "currency": "USD",
+        "issue_date": "2026-01-10",
+        "due_date": "2026-02-10",
+    }
+
+
+def _evidence(evidence_id="API-PO-001", amount="10000.00"):
+    return {
+        "evidence_id": evidence_id,
+        "evidence_type": "purchase_order",
+        "reference_number": evidence_id,
+        "supplier_name": "Supplier Ltd",
+        "buyer_name": "Buyer Ltd",
+        "amount": amount,
+        "currency": "USD",
+    }
+
+
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json() == {
+        "status": "ok",
+        "service": "trust-engine",
+        "version": "0.4.0",
+        "database": "ok",
+    }
 
 
 def test_verify_endpoint_returns_explainable_result():
-    payload = {
-        "invoice": {
-            "invoice_number": "API-INV-001",
-            "supplier_name": "Supplier Ltd",
-            "buyer_name": "Buyer Ltd",
-            "amount": "10000.00",
-            "currency": "usd",
-            "issue_date": "2026-01-10",
-            "due_date": "2026-02-10"
+    response = client.post(
+        "/verify",
+        json={
+            "invoice": _invoice(),
+            "evidence": {
+                **_evidence(),
+                "supplier_name": " supplier ltd ",
+                "buyer_name": "BUYER LTD",
+                "currency": "usd",
+            },
         },
-        "evidence": {
-            "evidence_id": "API-PO-001",
-            "evidence_type": "purchase_order",
-            "reference_number": "API-PO-001",
-            "supplier_name": " supplier ltd ",
-            "buyer_name": "BUYER LTD",
-            "amount": "10000.00",
-            "currency": "USD"
-        }
-    }
-
-    response = client.post("/verify", json=payload)
+    )
     assert response.status_code == 200
     verification = response.json()["verification"]
     assert verification["status"] == "verified"
@@ -47,21 +62,55 @@ def test_verify_endpoint_returns_explainable_result():
 
 def test_verify_endpoint_rejects_invalid_invoice_dates():
     payload = {
-        "invoice": {
-            "invoice_number": "API-INV-002",
-            "supplier_name": "Supplier Ltd",
-            "buyer_name": "Buyer Ltd",
-            "amount": "10000.00",
-            "currency": "USD",
-            "issue_date": "2026-02-10",
-            "due_date": "2026-01-10"
-        },
-        "evidence": {
-            "evidence_id": "API-PO-002",
-            "evidence_type": "purchase_order",
-            "reference_number": "API-PO-002"
-        }
+        "invoice": {**_invoice("API-INV-002"), "issue_date": "2026-02-10", "due_date": "2026-01-10"},
+        "evidence": _evidence("API-PO-002"),
     }
-
     response = client.post("/verify", json=payload)
     assert response.status_code == 422
+
+
+def test_invoice_and_evidence_can_be_stored_and_verified():
+    invoice_number = "API-CRUD-001"
+    evidence_id = "API-CRUD-PO-001"
+
+    invoice_response = client.post("/invoices", json=_invoice(invoice_number))
+    evidence_response = client.post("/evidence", json=_evidence(evidence_id))
+
+    assert invoice_response.status_code == 201
+    assert evidence_response.status_code == 201
+
+    invoice_lookup = client.get(f"/invoices/{invoice_number}")
+    evidence_lookup = client.get(f"/evidence/{evidence_id}")
+    assert invoice_lookup.status_code == 200
+    assert evidence_lookup.status_code == 200
+
+    verification = client.post(f"/verify-stored/{invoice_number}/{evidence_id}")
+    assert verification.status_code == 200
+    assert verification.json()["verification"]["status"] == "verified"
+
+    summary = client.post(f"/verification-summary/{invoice_number}/{evidence_id}")
+    assert summary.status_code == 200
+    assert summary.json()["decision"] == "verified"
+    assert summary.json()["verification_score"] == 100.0
+
+
+def test_missing_stored_records_return_404():
+    assert client.get("/invoices/DOES-NOT-EXIST").status_code == 404
+    assert client.get("/evidence/DOES-NOT-EXIST").status_code == 404
+    assert client.post("/verify-stored/DOES-NOT-EXIST/NO-EVIDENCE").status_code == 404
+    assert client.post("/verification-summary/DOES-NOT-EXIST/NO-EVIDENCE").status_code == 404
+
+
+def test_mismatched_stored_evidence_requires_review():
+    invoice_number = "API-REVIEW-001"
+    evidence_id = "API-REVIEW-PO-001"
+
+    assert client.post("/invoices", json=_invoice(invoice_number)).status_code == 201
+    assert client.post("/evidence", json=_evidence(evidence_id, amount="9000.00")).status_code == 201
+
+    response = client.post(f"/verification-summary/{invoice_number}/{evidence_id}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "review_required"
+    assert body["verification_score"] == 75.0
+    assert "amount_match" in body["failed_checks"]
