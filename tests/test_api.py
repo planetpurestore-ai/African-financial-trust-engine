@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import APP_VERSION, app
 
 
 client = TestClient(app)
@@ -34,12 +34,11 @@ def _evidence(evidence_id="API-PO-001", amount="10000.00", **overrides):
 def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "service": "trust-engine",
-        "version": "0.5.0",
-        "database": "ok",
-    }
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "trust-engine"
+    assert body["version"] == APP_VERSION
+    assert body["database"] == "ok"
 
 
 def test_verify_endpoint_returns_explainable_result():
@@ -55,7 +54,9 @@ def test_verify_endpoint_returns_explainable_result():
         },
     )
     assert response.status_code == 200
-    verification = response.json()["verification"]
+    body = response.json()
+    assert body["decision"] == "verified"
+    verification = body["verification"]
     assert verification["status"] == "verified"
     assert verification["verification_score"] == 100.0
 
@@ -80,7 +81,7 @@ def test_invoice_and_evidence_can_be_stored_and_verified():
 
     verification = client.post(f"/verify-stored/{invoice_number}/{evidence_id}")
     assert verification.status_code == 200
-    assert verification.json()["verification"]["status"] == "verified"
+    assert verification.json()["decision"] == "verified"
 
     summary = client.post(f"/verification-summary/{invoice_number}/{evidence_id}")
     assert summary.status_code == 200
@@ -124,6 +125,7 @@ def test_batch_verification_can_combine_multiple_evidence_records():
     body = response.json()
     verification = body["verification"]
 
+    assert body["decision"] == "verified"
     assert verification["status"] == "verified"
     assert verification["verification_score"] == 100.0
     assert verification["evidence_count"] == 2
@@ -132,4 +134,10 @@ def test_batch_verification_can_combine_multiple_evidence_records():
 
 def test_batch_verification_requires_at_least_one_evidence_record():
     response = client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-EMPTY"), "evidence": []})
+    assert response.status_code == 422
+
+
+def test_batch_verification_rejects_more_than_100_evidence_records():
+    evidence = [_evidence(f"API-MANY-{i}") for i in range(101)]
+    response = client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-LIMIT"), "evidence": evidence})
     assert response.status_code == 422
