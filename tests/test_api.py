@@ -18,7 +18,7 @@ def _invoice(invoice_number="API-INV-001"):
     }
 
 
-def _evidence(evidence_id="API-PO-001", amount="10000.00"):
+def _evidence(evidence_id="API-PO-001", amount="10000.00", **overrides):
     return {
         "evidence_id": evidence_id,
         "evidence_type": "purchase_order",
@@ -27,6 +27,7 @@ def _evidence(evidence_id="API-PO-001", amount="10000.00"):
         "buyer_name": "Buyer Ltd",
         "amount": amount,
         "currency": "USD",
+        **overrides,
     }
 
 
@@ -36,7 +37,7 @@ def test_health_endpoint():
     assert response.json() == {
         "status": "ok",
         "service": "trust-engine",
-        "version": "0.4.0",
+        "version": "0.5.0",
         "database": "ok",
     }
 
@@ -46,12 +47,11 @@ def test_verify_endpoint_returns_explainable_result():
         "/verify",
         json={
             "invoice": _invoice(),
-            "evidence": {
-                **_evidence(),
-                "supplier_name": " supplier ltd ",
-                "buyer_name": "BUYER LTD",
-                "currency": "usd",
-            },
+            "evidence": _evidence(
+                supplier_name=" supplier ltd ",
+                buyer_name="BUYER LTD",
+                currency="usd",
+            ),
         },
     )
     assert response.status_code == 200
@@ -73,16 +73,10 @@ def test_invoice_and_evidence_can_be_stored_and_verified():
     invoice_number = "API-CRUD-001"
     evidence_id = "API-CRUD-PO-001"
 
-    invoice_response = client.post("/invoices", json=_invoice(invoice_number))
-    evidence_response = client.post("/evidence", json=_evidence(evidence_id))
-
-    assert invoice_response.status_code == 201
-    assert evidence_response.status_code == 201
-
-    invoice_lookup = client.get(f"/invoices/{invoice_number}")
-    evidence_lookup = client.get(f"/evidence/{evidence_id}")
-    assert invoice_lookup.status_code == 200
-    assert evidence_lookup.status_code == 200
+    assert client.post("/invoices", json=_invoice(invoice_number)).status_code == 201
+    assert client.post("/evidence", json=_evidence(evidence_id)).status_code == 201
+    assert client.get(f"/invoices/{invoice_number}").status_code == 200
+    assert client.get(f"/evidence/{evidence_id}").status_code == 200
 
     verification = client.post(f"/verify-stored/{invoice_number}/{evidence_id}")
     assert verification.status_code == 200
@@ -114,3 +108,28 @@ def test_mismatched_stored_evidence_requires_review():
     assert body["decision"] == "review_required"
     assert body["verification_score"] == 75.0
     assert "amount_match" in body["failed_checks"]
+
+
+def test_batch_verification_can_combine_multiple_evidence_records():
+    payload = {
+        "invoice": _invoice("API-BATCH-001"),
+        "evidence": [
+            _evidence("API-BATCH-CONTRACT", amount=None, evidence_type="contract"),
+            _evidence("API-BATCH-PAYMENT", amount="10000.00", evidence_type="payment_record"),
+        ],
+    }
+
+    response = client.post("/verify-batch", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    verification = body["verification"]
+
+    assert verification["status"] == "verified"
+    assert verification["verification_score"] == 100.0
+    assert verification["evidence_count"] == 2
+    assert set(verification["supporting_evidence"]["amount_match"]) == {"API-BATCH-PAYMENT"}
+
+
+def test_batch_verification_requires_at_least_one_evidence_record():
+    response = client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-EMPTY"), "evidence": []})
+    assert response.status_code == 422
