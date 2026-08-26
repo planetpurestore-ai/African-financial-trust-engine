@@ -8,7 +8,7 @@ from app.database import get_connection, initialize_database
 
 initialize_database()
 
-APP_VERSION = "0.6.0"
+APP_VERSION = "0.6.1"
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
@@ -50,9 +50,10 @@ def _verify_stored_records(invoice_number: str, evidence_id: str):
 
 
 def _decision_from_result(result: dict) -> str:
+    if result.get("status") == "review_required":
+        return "review_required"
     passed = result["passed_checks"]
-    total = result["total_checks"]
-    if passed == total:
+    if passed == result["total_checks"]:
         return "verified"
     if passed == 0:
         return "rejected"
@@ -157,4 +158,5 @@ def verification_summary(invoice_number: str, evidence_id: str):
     return {"invoice_number": invoice.invoice_number, "evidence_id": evidence.evidence_id,
             "decision": _decision_from_result(result), "verification_score": result["verification_score"],
             "passed_checks": result["passed_checks"], "total_checks": result["total_checks"],
-            "checks": result["checks"], "failed_checks": result["failed_checks"]}
+            "checks": result["checks"], "failed_checks": result["failed_checks"],
+            "conflicts": result.get("conflicts", [])}
