@@ -132,6 +132,24 @@ def test_batch_verification_can_combine_multiple_evidence_records():
     assert set(verification["supporting_evidence"]["amount_match"]) == {"API-BATCH-PAYMENT"}
 
 
+def test_batch_conflict_requires_review_even_when_all_checks_have_a_match():
+    payload = {
+        "invoice": _invoice("API-BATCH-CONFLICT"),
+        "evidence": [
+            _evidence("API-CONFLICT-LOW", amount="9000.00"),
+            _evidence("API-CONFLICT-CORRECT", amount="10000.00"),
+        ],
+    }
+
+    response = client.post("/verify-batch", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "review_required"
+    assert body["verification"]["status"] == "review_required"
+    assert body["verification"]["verification_score"] == 100.0
+    assert body["verification"]["conflicts"] == ["amount_match"]
+
+
 def test_batch_verification_requires_at_least_one_evidence_record():
     response = client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-EMPTY"), "evidence": []})
     assert response.status_code == 422
