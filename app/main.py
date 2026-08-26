@@ -1,14 +1,16 @@
+import json
+
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.models import Invoice
 from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence, compare_invoice_to_evidence_set
-from app.database import get_connection, initialize_database
+from app.database import get_connection, initialize_database, record_verification_audit
 
 initialize_database()
 
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.7.0"
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
@@ -55,9 +57,19 @@ def _decision_from_result(result: dict) -> str:
     passed = result["passed_checks"]
     if passed == result["total_checks"]:
         return "verified"
-    if passed == 0:
-        return "rejected"
-    return "review_required"
+    return "rejected" if passed == 0 else "review_required"
+
+
+def _record_audit(invoice_number: str, evidence_ids: list[str], result: dict) -> int:
+    return record_verification_audit(
+        invoice_number=invoice_number,
+        evidence_ids=json.dumps(evidence_ids),
+        decision=_decision_from_result(result),
+        verification_score=result["verification_score"],
+        passed_checks=result["passed_checks"],
+        total_checks=result["total_checks"],
+        failed_checks=json.dumps(result["failed_checks"]),
+    )
 
 
 @app.get("/health")
@@ -109,16 +121,18 @@ def create_evidence(evidence: Evidence):
 @app.post("/verify")
 def verify_invoice(request: VerificationRequest):
     result = compare_invoice_to_evidence(request.invoice, request.evidence)
+    audit_id = _record_audit(request.invoice.invoice_number, [request.evidence.evidence_id], result)
     return {"invoice_number": request.invoice.invoice_number, "evidence_id": request.evidence.evidence_id,
-            "decision": _decision_from_result(result), "verification": result}
+            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
 
 
 @app.post("/verify-batch")
 def verify_invoice_against_multiple_evidence(request: MultiEvidenceVerificationRequest):
     result = compare_invoice_to_evidence_set(request.invoice, request.evidence)
-    return {"invoice_number": request.invoice.invoice_number,
-            "evidence_ids": [item.evidence_id for item in request.evidence],
-            "decision": _decision_from_result(result), "verification": result}
+    evidence_ids = [item.evidence_id for item in request.evidence]
+    audit_id = _record_audit(request.invoice.invoice_number, evidence_ids, result)
+    return {"invoice_number": request.invoice.invoice_number, "evidence_ids": evidence_ids,
+            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
 
 
 @app.get("/invoices/{invoice_number}")
@@ -145,18 +159,33 @@ def get_evidence(evidence_id: str):
     return {"status": "found", "evidence": dict(row)}
 
 
+@app.get("/audits/{invoice_number}")
+def get_verification_audits(invoice_number: str):
+    connection = get_connection()
+    try:
+        rows = connection.execute(
+            "SELECT * FROM verification_audits WHERE invoice_number = ? ORDER BY audit_id DESC",
+            (invoice_number,),
+        ).fetchall()
+    finally:
+        connection.close()
+    return {"invoice_number": invoice_number, "count": len(rows), "audits": [dict(row) for row in rows]}
+
+
 @app.post("/verify-stored/{invoice_number}/{evidence_id}")
 def verify_stored(invoice_number: str, evidence_id: str):
     invoice, evidence, result = _verify_stored_records(invoice_number, evidence_id)
+    audit_id = _record_audit(invoice.invoice_number, [evidence.evidence_id], result)
     return {"invoice_number": invoice.invoice_number, "evidence_id": evidence.evidence_id,
-            "decision": _decision_from_result(result), "verification": result}
+            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
 
 
 @app.post("/verification-summary/{invoice_number}/{evidence_id}")
 def verification_summary(invoice_number: str, evidence_id: str):
     invoice, evidence, result = _verify_stored_records(invoice_number, evidence_id)
+    audit_id = _record_audit(invoice.invoice_number, [evidence.evidence_id], result)
     return {"invoice_number": invoice.invoice_number, "evidence_id": evidence.evidence_id,
-            "decision": _decision_from_result(result), "verification_score": result["verification_score"],
-            "passed_checks": result["passed_checks"], "total_checks": result["total_checks"],
-            "checks": result["checks"], "failed_checks": result["failed_checks"],
-            "conflicts": result.get("conflicts", [])}
+            "decision": _decision_from_result(result), "audit_id": audit_id,
+            "verification_score": result["verification_score"], "passed_checks": result["passed_checks"],
+            "total_checks": result["total_checks"], "checks": result["checks"],
+            "failed_checks": result["failed_checks"], "conflicts": result.get("conflicts", [])}
