@@ -25,7 +25,6 @@ def initialize_database():
                 due_date TEXT NOT NULL
             )
         """)
-
         connection.execute("""
             CREATE TABLE IF NOT EXISTS evidence (
                 evidence_id TEXT PRIMARY KEY,
@@ -39,7 +38,6 @@ def initialize_database():
                 description TEXT
             )
         """)
-
         connection.execute("""
             CREATE TABLE IF NOT EXISTS verification_audits (
                 audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,15 +56,7 @@ def initialize_database():
         connection.close()
 
 
-def record_verification_audit(
-    invoice_number: str,
-    evidence_ids: str,
-    decision: str,
-    verification_score: float,
-    passed_checks: int,
-    total_checks: int,
-    failed_checks: str,
-):
+def record_verification_audit(invoice_number, evidence_ids, decision, verification_score, passed_checks, total_checks, failed_checks):
     connection = get_connection()
     try:
         cursor = connection.execute(
@@ -74,10 +64,27 @@ def record_verification_audit(
             (invoice_number, evidence_ids, decision, verification_score,
              passed_checks, total_checks, failed_checks)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (invoice_number, evidence_ids, decision, verification_score,
-             passed_checks, total_checks, failed_checks),
+            (invoice_number, evidence_ids, decision, verification_score, passed_checks, total_checks, failed_checks),
         )
         connection.commit()
         return cursor.lastrowid
+    finally:
+        connection.close()
+
+
+def list_verification_audits(invoice_number, limit=50):
+    connection = get_connection()
+    try:
+        rows = connection.execute(
+            """SELECT audit_id, invoice_number, evidence_ids, decision,
+                      verification_score, passed_checks, total_checks,
+                      failed_checks, created_at
+               FROM verification_audits
+               WHERE invoice_number = ?
+               ORDER BY audit_id DESC
+               LIMIT ?""",
+            (invoice_number, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
     finally:
         connection.close()
