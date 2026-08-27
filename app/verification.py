@@ -52,8 +52,6 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
             incomplete_checks.append(check_name)
 
     passed = sum(checks.values())
-    # Score measures evidence coverage, not pass/fail. A conflicting check is fully
-    # scoreable because evidence exists on both sides; conflicts separately force review.
     scoreable = sum(
         bool([eid for eid, values in checks_by_evidence.items() if values.get(name) is not None])
         for name in CHECK_NAMES
@@ -71,7 +69,7 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
         "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
         "total_checks": total,
-        "verification_score": round((scoreable / total) * 100, 2),
+        "verification_score": round((passed / total) * 100, 2),
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
     }
