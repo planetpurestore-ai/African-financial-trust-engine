@@ -27,27 +27,44 @@ def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool
 def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
     checks: dict[str, bool] = {}
     conflicts: list[str] = []
+    incomplete_checks: list[str] = []
     supporting_evidence: dict[str, list[str]] = {}
 
     for check_name in CHECK_NAMES:
-        true_ids = [eid for eid, checks_for_evidence in checks_by_evidence.items() if checks_for_evidence.get(check_name) is True]
-        false_ids = [eid for eid, checks_for_evidence in checks_by_evidence.items() if checks_for_evidence.get(check_name) is False]
-        checks[check_name] = bool(true_ids) and not false_ids
+        true_ids = [
+            eid for eid, checks_for_evidence in checks_by_evidence.items()
+            if checks_for_evidence.get(check_name) is True
+        ]
+        false_ids = [
+            eid for eid, checks_for_evidence in checks_by_evidence.items()
+            if checks_for_evidence.get(check_name) is False
+        ]
+        unknown_ids = [
+            eid for eid, checks_for_evidence in checks_by_evidence.items()
+            if checks_for_evidence.get(check_name) is None
+        ]
+
+        checks[check_name] = bool(true_ids) and not false_ids and not unknown_ids
         supporting_evidence[check_name] = true_ids
+
         if true_ids and false_ids:
             conflicts.append(check_name)
+        elif unknown_ids:
+            incomplete_checks.append(check_name)
 
     passed = sum(checks.values())
     total = len(CHECK_NAMES)
     failed_checks = [name for name, passed_check in checks.items() if not passed_check]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
-    status = "verified" if passed == total and not conflicts else "review_required"
+    failed_checks.extend(f"incomplete:{name}" for name in incomplete_checks if name not in conflicts)
+    status = "verified" if passed == total and not conflicts and not incomplete_checks else "review_required"
 
     return {
         "status": status,
         "checks": checks,
         "failed_checks": failed_checks,
         "conflicts": conflicts,
+        "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
         "total_checks": total,
         "verification_score": round((passed / total) * 100, 2),
@@ -62,7 +79,7 @@ def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
 
 
 def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
-    """Aggregate multiple evidence records while surfacing conflicting evidence."""
+    """Aggregate multiple evidence records while surfacing conflicting or incomplete evidence."""
     checks_by_evidence = {
         item.evidence_id: _checks_for_evidence(invoice, item)
         for item in evidence_items
