@@ -1,7 +1,7 @@
 import json
 
 from fastapi import FastAPI, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import Invoice
 from app.evidence import Evidence
@@ -10,7 +10,7 @@ from app.database import get_connection, initialize_database, list_verification_
 
 initialize_database()
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
@@ -28,15 +28,13 @@ class MultiEvidenceVerificationRequest(BaseModel):
     invoice: Invoice
     evidence: list[Evidence] = Field(min_length=1, max_length=100)
 
-    @staticmethod
-    def _unique_evidence_ids(value):
+    @field_validator("evidence")
+    @classmethod
+    def validate_unique_evidence_ids(cls, value):
         ids = [item.evidence_id for item in value]
         if len(ids) != len(set(ids)):
             raise ValueError("evidence_id values must be unique within a batch")
         return value
-
-    from pydantic import field_validator
-    _validate_unique_evidence_ids = field_validator("evidence")(_unique_evidence_ids)
 
 
 def _load_stored_records(invoice_number: str, evidence_id: str):
