@@ -31,18 +31,9 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
     supporting_evidence: dict[str, list[str]] = {}
 
     for check_name in CHECK_NAMES:
-        true_ids = [
-            eid for eid, checks_for_evidence in checks_by_evidence.items()
-            if checks_for_evidence.get(check_name) is True
-        ]
-        false_ids = [
-            eid for eid, checks_for_evidence in checks_by_evidence.items()
-            if checks_for_evidence.get(check_name) is False
-        ]
-        unknown_ids = [
-            eid for eid, checks_for_evidence in checks_by_evidence.items()
-            if checks_for_evidence.get(check_name) is None
-        ]
+        true_ids = [eid for eid, values in checks_by_evidence.items() if values.get(check_name) is True]
+        false_ids = [eid for eid, values in checks_by_evidence.items() if values.get(check_name) is False]
+        unknown_ids = [eid for eid, values in checks_by_evidence.items() if values.get(check_name) is None]
 
         checks[check_name] = bool(true_ids) and not false_ids
         supporting_evidence[check_name] = true_ids
@@ -53,6 +44,10 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
             incomplete_checks.append(check_name)
 
     passed = sum(checks.values())
+    scoreable = sum(
+        bool([eid for eid, values in checks_by_evidence.items() if values.get(name) is True])
+        for name in CHECK_NAMES
+    )
     total = len(CHECK_NAMES)
     failed_checks = [name for name, passed_check in checks.items() if not passed_check]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
@@ -67,7 +62,7 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
         "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
         "total_checks": total,
-        "verification_score": round((passed / total) * 100, 2),
+        "verification_score": round((scoreable / total) * 100, 2),
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
     }
@@ -80,8 +75,5 @@ def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
 
 def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
     """Aggregate multiple evidence records while surfacing conflicting or incomplete evidence."""
-    checks_by_evidence = {
-        item.evidence_id: _checks_for_evidence(invoice, item)
-        for item in evidence_items
-    }
+    checks_by_evidence = {item.evidence_id: _checks_for_evidence(invoice, item) for item in evidence_items}
     return _aggregate(checks_by_evidence)
