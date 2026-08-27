@@ -69,7 +69,7 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
         "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
         "total_checks": total,
-        "verification_score": round((passed / total) * 100, 2),
+        "verification_score": round((scoreable / total) * 100, 2),
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
     }
