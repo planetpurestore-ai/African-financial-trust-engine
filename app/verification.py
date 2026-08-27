@@ -53,13 +53,17 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
 
     passed = sum(checks.values())
     scoreable = sum(
-        bool([eid for eid, values in checks_by_evidence.items() if values.get(name) is not None])
+        any(values.get(name) is not None for values in checks_by_evidence.values())
         for name in CHECK_NAMES
     )
     total = len(CHECK_NAMES)
     failed_checks = [name for name, passed_check in checks.items() if not passed_check]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
     status = "verified" if passed == total and not conflicts and not incomplete_checks else "review_required"
+
+    # A directly evaluated failed check is part of the verification denominator.
+    # This keeps a single amount/supplier/etc. mismatch at 75% rather than 100%.
+    verification_score = round((passed / total) * 100, 2)
 
     return {
         "status": status,
@@ -69,7 +73,7 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
         "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
         "total_checks": total,
-        "verification_score": round((scoreable / total) * 100, 2),
+        "verification_score": verification_score,
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
     }
