@@ -9,7 +9,7 @@ class Invoice(BaseModel):
     supplier_name: str = Field(min_length=1)
     buyer_name: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
-    currency: str = Field(min_length=3, max_length=3)
+    currency: str
     issue_date: date
     due_date: date
 
