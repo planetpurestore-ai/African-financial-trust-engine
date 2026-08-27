@@ -10,17 +10,25 @@ def _normalize_text(value: str | None) -> str | None:
     return " ".join(value.strip().casefold().split()) or None
 
 
+def _normalize_currency(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip().upper() or None
+
+
 def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool | None]:
     invoice_supplier = _normalize_text(invoice.supplier_name)
     invoice_buyer = _normalize_text(invoice.buyer_name)
     evidence_supplier = _normalize_text(evidence.supplier_name)
     evidence_buyer = _normalize_text(evidence.buyer_name)
+    invoice_currency = _normalize_currency(invoice.currency)
+    evidence_currency = _normalize_currency(evidence.currency)
 
     return {
         "supplier_match": None if evidence_supplier is None else evidence_supplier == invoice_supplier,
         "buyer_match": None if evidence_buyer is None else evidence_buyer == invoice_buyer,
         "amount_match": None if evidence.amount is None else evidence.amount == invoice.amount,
-        "currency_match": None if evidence.currency is None else evidence.currency == invoice.currency,
+        "currency_match": None if evidence_currency is None else evidence_currency == invoice_currency,
     }
 
 
@@ -44,14 +52,15 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
             incomplete_checks.append(check_name)
 
     passed = sum(checks.values())
+    # Score measures evidence coverage, not pass/fail. A conflicting check is fully
+    # scoreable because evidence exists on both sides; conflicts separately force review.
     scoreable = sum(
-        bool([eid for eid, values in checks_by_evidence.items() if values.get(name) is True])
+        bool([eid for eid, values in checks_by_evidence.items() if values.get(name) is not None])
         for name in CHECK_NAMES
     )
     total = len(CHECK_NAMES)
     failed_checks = [name for name, passed_check in checks.items() if not passed_check]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
-    failed_checks.extend(f"incomplete:{name}" for name in incomplete_checks if name not in conflicts)
     status = "verified" if passed == total and not conflicts and not incomplete_checks else "review_required"
 
     return {
