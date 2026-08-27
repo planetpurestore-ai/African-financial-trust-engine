@@ -1,12 +1,12 @@
 import json
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.models import Invoice
 from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence, compare_invoice_to_evidence_set
-from app.database import get_connection, initialize_database, record_verification_audit
+from app.database import get_connection, initialize_database, list_verification_audits, record_verification_audit
 
 initialize_database()
 
@@ -27,6 +27,16 @@ class VerificationRequest(BaseModel):
 class MultiEvidenceVerificationRequest(BaseModel):
     invoice: Invoice
     evidence: list[Evidence] = Field(min_length=1, max_length=100)
+
+    @staticmethod
+    def _unique_evidence_ids(value):
+        ids = [item.evidence_id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ValueError("evidence_id values must be unique within a batch")
+        return value
+
+    from pydantic import field_validator
+    _validate_unique_evidence_ids = field_validator("evidence")(_unique_evidence_ids)
 
 
 def _load_stored_records(invoice_number: str, evidence_id: str):
@@ -160,16 +170,9 @@ def get_evidence(evidence_id: str):
 
 
 @app.get("/audits/{invoice_number}")
-def get_verification_audits(invoice_number: str):
-    connection = get_connection()
-    try:
-        rows = connection.execute(
-            "SELECT * FROM verification_audits WHERE invoice_number = ? ORDER BY audit_id DESC",
-            (invoice_number,),
-        ).fetchall()
-    finally:
-        connection.close()
-    return {"invoice_number": invoice_number, "count": len(rows), "audits": [dict(row) for row in rows]}
+def get_verification_audits(invoice_number: str, limit: int = Query(default=50, ge=1, le=100)):
+    audits = list_verification_audits(invoice_number, limit=limit)
+    return {"invoice_number": invoice_number, "count": len(audits), "audits": audits}
 
 
 @app.post("/verify-stored/{invoice_number}/{evidence_id}")
@@ -188,4 +191,5 @@ def verification_summary(invoice_number: str, evidence_id: str):
             "decision": _decision_from_result(result), "audit_id": audit_id,
             "verification_score": result["verification_score"], "passed_checks": result["passed_checks"],
             "total_checks": result["total_checks"], "checks": result["checks"],
-            "failed_checks": result["failed_checks"], "conflicts": result.get("conflicts", [])}
+            "failed_checks": result["failed_checks"], "conflicts": result.get("conflicts", []),
+            "incomplete_checks": result.get("incomplete_checks", [])}
