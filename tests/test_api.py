@@ -93,7 +93,37 @@ def test_audit_history_records_verification():
     assert body["audits"][0]["decision"] == "verified"
 
 
+def test_audit_history_honors_limit():
+    invoice_number = "API-AUDIT-LIMIT"
+    for index in range(3):
+        client.post("/verify", json={"invoice": _invoice(invoice_number), "evidence": _evidence(f"API-AUDIT-{index}")})
+    response = client.get(f"/audits/{invoice_number}?limit=2")
+    assert response.status_code == 200
+    assert response.json()["count"] == 2
+
+
+def test_batch_verification_rejects_duplicate_evidence_ids():
+    payload = {"invoice": _invoice("API-BATCH-DUPLICATE"), "evidence": [
+        _evidence("API-DUPLICATE"), _evidence("API-DUPLICATE")]}
+    assert client.post("/verify-batch", json=payload).status_code == 422
+
+
+def test_incomplete_single_evidence_requires_review():
+    body = client.post("/verify", json={
+        "invoice": _invoice("API-INCOMPLETE"),
+        "evidence": _evidence("API-INCOMPLETE-PO", amount=None, currency=None, supplier_name=None, buyer_name=None),
+    }).json()
+    assert body["decision"] == "review_required"
+    assert body["verification"]["verification_score"] == 0.0
+    assert set(body["verification"]["incomplete_checks"]) == set(("supplier_match", "buyer_match", "amount_match", "currency_match"))
+
+
 def test_batch_verification_limits():
     assert client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-EMPTY"), "evidence": []}).status_code == 422
     evidence = [_evidence(f"API-MANY-{i}") for i in range(101)]
     assert client.post("/verify-batch", json={"invoice": _invoice("API-BATCH-LIMIT"), "evidence": evidence}).status_code == 422
+
+
+def test_audit_history_limit_validation():
+    assert client.get("/audits/API-AUDIT-VALIDATION?limit=0").status_code == 422
+    assert client.get("/audits/API-AUDIT-VALIDATION?limit=101").status_code == 422
