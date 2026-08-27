@@ -44,12 +44,12 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
             if checks_for_evidence.get(check_name) is None
         ]
 
-        checks[check_name] = bool(true_ids) and not false_ids and not unknown_ids
+        checks[check_name] = bool(true_ids) and not false_ids
         supporting_evidence[check_name] = true_ids
 
         if true_ids and false_ids:
             conflicts.append(check_name)
-        elif unknown_ids:
+        elif not true_ids and not false_ids and unknown_ids:
             incomplete_checks.append(check_name)
 
     passed = sum(checks.values())
