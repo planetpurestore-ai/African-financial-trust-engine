@@ -12,7 +12,7 @@ class Evidence(BaseModel):
     supplier_name: str | None = None
     buyer_name: str | None = None
     amount: Decimal | None = Field(default=None, gt=0)
-    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    currency: str | None = None
     evidence_date: date | None = None
     description: str | None = None
 
