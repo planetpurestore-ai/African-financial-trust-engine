@@ -58,6 +58,31 @@ def test_invoice_and_evidence_can_be_stored_and_verified():
     assert client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()["verification_score"] == 100.0
 
 
+def test_end_to_end_transaction_submission_persists_and_verifies():
+    invoice_number = "API-TRANSACTION-001"
+    payload = {"invoice": _invoice(invoice_number), "evidence": [
+        _evidence("API-TXN-PO", evidence_type="purchase_order"),
+        _evidence("API-TXN-PAY", evidence_type="payment_record")
+    ]}
+    response = client.post("/transactions", json=payload)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["decision"] == "verified"
+    assert body["verification"]["evidence_count"] == 2
+    assert client.get(f"/invoices/{invoice_number}").status_code == 200
+    assert client.get("/evidence/API-TXN-PO").status_code == 200
+    assert client.get(f"/audits/{invoice_number}").json()["count"] >= 1
+
+
+def test_transaction_submission_does_not_persist_invalid_request():
+    invoice_number = "API-TRANSACTION-INVALID"
+    payload = {"invoice": _invoice(invoice_number), "evidence": [
+        _evidence("API-TXN-DUP"), _evidence("API-TXN-DUP")
+    ]}
+    assert client.post("/transactions", json=payload).status_code == 422
+    assert client.get(f"/invoices/{invoice_number}").status_code == 404
+
+
 def test_missing_stored_records_return_404():
     assert client.get("/invoices/DOES-NOT-EXIST").status_code == 404
     assert client.get("/evidence/DOES-NOT-EXIST").status_code == 404
