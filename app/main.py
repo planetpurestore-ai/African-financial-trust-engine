@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.models import Invoice
@@ -10,7 +12,8 @@ from app.database import get_connection, initialize_database, list_verification_
 
 initialize_database()
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.9.0"
+DASHBOARD_PATH = Path(__file__).resolve().parent / "dashboard.html"
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
@@ -78,6 +81,16 @@ def _record_audit(invoice_number: str, evidence_ids: list[str], result: dict) ->
         total_checks=result["total_checks"],
         failed_checks=json.dumps(result["failed_checks"]),
     )
+
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    return FileResponse(DASHBOARD_PATH, media_type="text/html")
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_alias():
+    return FileResponse(DASHBOARD_PATH, media_type="text/html")
 
 
 @app.get("/health")
