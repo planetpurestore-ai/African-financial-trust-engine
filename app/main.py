@@ -12,7 +12,7 @@ from app.database import get_connection, initialize_database, list_verification_
 
 initialize_database()
 
-APP_VERSION = "0.9.0"
+APP_VERSION = "1.0.0"
 DASHBOARD_PATH = Path(__file__).resolve().parent / "dashboard.html"
 
 app = FastAPI(
@@ -38,6 +38,42 @@ class MultiEvidenceVerificationRequest(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("evidence_id values must be unique within a batch")
         return value
+
+
+class TransactionSubmissionRequest(MultiEvidenceVerificationRequest):
+    """End-to-end MVP transaction intake: persist evidence, verify it, and create an audit record."""
+
+
+def _store_invoice(invoice: Invoice):
+    connection = get_connection()
+    try:
+        connection.execute(
+            """INSERT OR REPLACE INTO invoices
+            (invoice_number, supplier_name, buyer_name, amount, currency, issue_date, due_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (invoice.invoice_number, invoice.supplier_name, invoice.buyer_name, str(invoice.amount), invoice.currency,
+             invoice.issue_date.isoformat(), invoice.due_date.isoformat()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _store_evidence(evidence: Evidence):
+    connection = get_connection()
+    try:
+        connection.execute(
+            """INSERT OR REPLACE INTO evidence
+            (evidence_id, evidence_type, reference_number, supplier_name,
+             buyer_name, amount, currency, evidence_date, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (evidence.evidence_id, evidence.evidence_type, evidence.reference_number, evidence.supplier_name,
+             evidence.buyer_name, str(evidence.amount) if evidence.amount is not None else None, evidence.currency,
+             evidence.evidence_date.isoformat() if evidence.evidence_date else None, evidence.description),
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def _load_stored_records(invoice_number: str, evidence_id: str):
@@ -83,6 +119,16 @@ def _record_audit(invoice_number: str, evidence_ids: list[str], result: dict) ->
     )
 
 
+def _verification_response(invoice_number: str, evidence_ids: list[str], result: dict, audit_id: int):
+    return {
+        "invoice_number": invoice_number,
+        "evidence_ids": evidence_ids,
+        "decision": _decision_from_result(result),
+        "audit_id": audit_id,
+        "verification": result,
+    }
+
+
 @app.get("/", include_in_schema=False)
 def dashboard():
     return FileResponse(DASHBOARD_PATH, media_type="text/html")
@@ -105,37 +151,13 @@ def health():
 
 @app.post("/invoices", status_code=status.HTTP_201_CREATED)
 def create_invoice(invoice: Invoice):
-    connection = get_connection()
-    try:
-        connection.execute(
-            """INSERT OR REPLACE INTO invoices
-            (invoice_number, supplier_name, buyer_name, amount, currency, issue_date, due_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (invoice.invoice_number, invoice.supplier_name, invoice.buyer_name, str(invoice.amount), invoice.currency,
-             invoice.issue_date.isoformat(), invoice.due_date.isoformat()),
-        )
-        connection.commit()
-    finally:
-        connection.close()
+    _store_invoice(invoice)
     return {"status": "stored", "invoice": invoice.model_dump(mode="json")}
 
 
 @app.post("/evidence", status_code=status.HTTP_201_CREATED)
 def create_evidence(evidence: Evidence):
-    connection = get_connection()
-    try:
-        connection.execute(
-            """INSERT OR REPLACE INTO evidence
-            (evidence_id, evidence_type, reference_number, supplier_name,
-             buyer_name, amount, currency, evidence_date, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (evidence.evidence_id, evidence.evidence_type, evidence.reference_number, evidence.supplier_name,
-             evidence.buyer_name, str(evidence.amount) if evidence.amount is not None else None, evidence.currency,
-             evidence.evidence_date.isoformat() if evidence.evidence_date else None, evidence.description),
-        )
-        connection.commit()
-    finally:
-        connection.close()
+    _store_evidence(evidence)
     return {"status": "stored", "evidence": evidence.model_dump(mode="json")}
 
 
@@ -143,8 +165,7 @@ def create_evidence(evidence: Evidence):
 def verify_invoice(request: VerificationRequest):
     result = compare_invoice_to_evidence(request.invoice, request.evidence)
     audit_id = _record_audit(request.invoice.invoice_number, [request.evidence.evidence_id], result)
-    return {"invoice_number": request.invoice.invoice_number, "evidence_id": request.evidence.evidence_id,
-            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
+    return _verification_response(request.invoice.invoice_number, [request.evidence.evidence_id], result, audit_id)
 
 
 @app.post("/verify-batch")
@@ -152,8 +173,19 @@ def verify_invoice_against_multiple_evidence(request: MultiEvidenceVerificationR
     result = compare_invoice_to_evidence_set(request.invoice, request.evidence)
     evidence_ids = [item.evidence_id for item in request.evidence]
     audit_id = _record_audit(request.invoice.invoice_number, evidence_ids, result)
-    return {"invoice_number": request.invoice.invoice_number, "evidence_ids": evidence_ids,
-            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
+    return _verification_response(request.invoice.invoice_number, evidence_ids, result, audit_id)
+
+
+@app.post("/transactions", status_code=status.HTTP_201_CREATED)
+def submit_transaction(request: TransactionSubmissionRequest):
+    """Persist a transaction package and immediately produce its auditable verification result."""
+    _store_invoice(request.invoice)
+    for evidence in request.evidence:
+        _store_evidence(evidence)
+    result = compare_invoice_to_evidence_set(request.invoice, request.evidence)
+    evidence_ids = [item.evidence_id for item in request.evidence]
+    audit_id = _record_audit(request.invoice.invoice_number, evidence_ids, result)
+    return _verification_response(request.invoice.invoice_number, evidence_ids, result, audit_id)
 
 
 @app.get("/invoices/{invoice_number}")
@@ -190,17 +222,23 @@ def get_verification_audits(invoice_number: str, limit: int = Query(default=50, 
 def verify_stored(invoice_number: str, evidence_id: str):
     invoice, evidence, result = _verify_stored_records(invoice_number, evidence_id)
     audit_id = _record_audit(invoice.invoice_number, [evidence.evidence_id], result)
-    return {"invoice_number": invoice.invoice_number, "evidence_id": evidence.evidence_id,
-            "decision": _decision_from_result(result), "audit_id": audit_id, "verification": result}
+    return _verification_response(invoice.invoice_number, [evidence.evidence_id], result, audit_id)
 
 
 @app.post("/verification-summary/{invoice_number}/{evidence_id}")
 def verification_summary(invoice_number: str, evidence_id: str):
     invoice, evidence, result = _verify_stored_records(invoice_number, evidence_id)
     audit_id = _record_audit(invoice.invoice_number, [evidence.evidence_id], result)
-    return {"invoice_number": invoice.invoice_number, "evidence_id": evidence.evidence_id,
-            "decision": _decision_from_result(result), "audit_id": audit_id,
-            "verification_score": result["verification_score"], "passed_checks": result["passed_checks"],
-            "total_checks": result["total_checks"], "checks": result["checks"],
-            "failed_checks": result["failed_checks"], "conflicts": result.get("conflicts", []),
-            "incomplete_checks": result.get("incomplete_checks", [])}
+    return {
+        "invoice_number": invoice.invoice_number,
+        "evidence_id": evidence.evidence_id,
+        "audit_id": audit_id,
+        "decision": _decision_from_result(result),
+        "verification_score": result["verification_score"],
+        "passed_checks": result["passed_checks"],
+        "total_checks": result["total_checks"],
+        "checks": result["checks"],
+        "failed_checks": result["failed_checks"],
+        "conflicts": result.get("conflicts", []),
+        "incomplete_checks": result.get("incomplete_checks", []),
+    }
