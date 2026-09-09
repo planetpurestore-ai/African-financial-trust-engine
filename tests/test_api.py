@@ -20,6 +20,16 @@ def test_health_endpoint():
     assert body == {"status": "ok", "service": "trust-engine", "version": APP_VERSION, "database": "ok"}
 
 
+def test_dashboard_routes_return_html():
+    root = client.get("/")
+    dashboard = client.get("/dashboard")
+    assert root.status_code == 200
+    assert dashboard.status_code == 200
+    assert "Trust Engine" in root.text
+    assert "Verify a transaction" in dashboard.text
+    assert root.headers["content-type"].startswith("text/html")
+
+
 def test_verify_endpoint_returns_explainable_result_and_audit_id():
     response = client.post("/verify", json={"invoice": _invoice(), "evidence": _evidence(
         supplier_name=" supplier ltd ", buyer_name="BUYER LTD", currency="usd")})
