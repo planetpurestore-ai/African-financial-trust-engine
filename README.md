@@ -1,38 +1,54 @@
 # African Financial Trust — Trust Engine
 
-African Financial Trust is building verification infrastructure for African commerce. The Trust Engine is the core product: it connects fragmented financial and transaction evidence and produces an explainable verification result that institutions can use when assessing business activity.
+African Financial Trust is building verification infrastructure for African commerce. The Trust Engine connects fragmented financial and transaction evidence and produces an explainable verification result that institutions can use when assessing business activity.
 
-## Current MVP prototype
+## MVP 1.0
 
-The repository currently provides:
+The prototype now demonstrates the complete core workflow:
+
+**Transaction submission → evidence persistence → verification → score → decision → evidence attribution → audit record → human review console.**
+
+Included:
 
 - Invoice storage and retrieval
 - Evidence storage and retrieval
 - Single-evidence invoice verification
-- Multi-evidence invoice verification
-- Explainable checks for supplier, buyer, amount and currency
+- Multi-evidence invoice verification (up to 100 records)
+- Explicit supplier, buyer, amount and currency checks
+- Missing-evidence detection
+- Conflicting-evidence detection
 - Verification scoring and failed-check reporting
-- Evidence attribution showing which evidence supports each check
+- Evidence attribution showing which records support each check
+- End-to-end `/transactions` intake endpoint that persists and verifies a transaction package
 - Stored-record verification and decision summaries
-- SQLite persistence with a stable project-relative database path
+- SQLite persistence with a project-relative database path
 - Input normalization and validation
+- Browser-based review console at `/` and `/dashboard`
+- Audit history view in the review console
+- Interactive FastAPI API documentation at `/docs`
 - Automated unit and API tests
 - GitHub Actions test workflow
 
-## API
-
-Run locally with:
+## Run locally
 
 ```bash
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Interactive API documentation is automatically available through FastAPI at `/docs` when the server is running.
+Then open the review console at `http://127.0.0.1:8000/` or API documentation at `http://127.0.0.1:8000/docs`.
+
+## Core API
 
 ### Health
 
 `GET /health`
+
+### End-to-end transaction submission
+
+`POST /transactions`
+
+Accepts one invoice and 1–100 unique evidence records. The transaction is persisted, verified, and written to the audit trail in one operation.
 
 ### Store an invoice
 
@@ -50,15 +66,31 @@ Interactive API documentation is automatically available through FastAPI at `/do
 
 `POST /verify-batch`
 
-The batch endpoint accepts up to 100 evidence records and reports which evidence records support each verification check.
+### Retrieve stored records
 
-### Verify records already stored in the database
+`GET /invoices/{invoice_number}`
+
+`GET /evidence/{evidence_id}`
+
+### Audit history
+
+`GET /audits/{invoice_number}?limit=50`
+
+### Verify stored records
 
 `POST /verify-stored/{invoice_number}/{evidence_id}`
 
-### Get a decision-oriented summary
+### Decision summary
 
 `POST /verification-summary/{invoice_number}/{evidence_id}`
+
+## Verification philosophy
+
+The engine is deliberately explainable. Missing evidence is never silently treated as a pass. Each check is explicit, failed and incomplete checks are returned, conflicts are identified, and the result includes a verification score plus evidence attribution.
+
+A `verified` result currently means all defined checks pass without unresolved conflicts or incomplete checks. A partial or conflicting result is `review_required`. A zero-check stored-record result is `rejected`. These are prototype verification states, not lending or credit decisions.
+
+For multiple evidence records, a check is supported when at least one supplied evidence record provides a matching value. When multiple evidence records disagree on a populated field, the engine identifies the conflict and requires review rather than silently choosing a value.
 
 ## Testing
 
@@ -68,19 +100,13 @@ Run the full test suite with:
 pytest -q
 ```
 
-GitHub Actions is configured to run the same test suite on pushes to `main`, pull requests targeting `main`, and manual workflow dispatches.
+GitHub Actions runs the same suite on pushes to `main`, pull requests targeting `main`, and manual workflow dispatches.
 
-## Verification philosophy
+## Prototype boundary
 
-The engine is deliberately explainable. It does not treat missing evidence as a pass. Each check is explicit, failed checks are returned, and the result includes a verification score.
+This is a functional engineering MVP, not production financial infrastructure. The prototype is intentionally limited to structured evidence supplied by the caller. It does not yet connect to live bank, mobile-money, accounting, ERP, logistics or government data sources, and it does not make lending or credit decisions.
 
-A `verified` result currently means all defined checks pass. A partial result is `review_required`, while a zero-check result in the stored-record summary is `rejected`. These are prototype verification states, not lending or credit decisions.
-
-For multiple evidence records, a check is supported when at least one supplied evidence record provides a matching value. The response identifies the evidence supporting each check so a human reviewer can inspect the underlying records.
-
-## Important limitation
-
-This is an early engineering MVP, not production financial infrastructure. Before production use it needs strong authentication and authorization, encryption and secrets management, audit and data-retention controls, production-grade database infrastructure, source integrations, richer verification and anomaly rules, observability, security testing, regulatory/compliance review and institutional pilots.
+Production work after the prototype includes authentication and authorization, encryption and secrets management, production database infrastructure, source integrations, richer verification and anomaly rules, observability, security testing, regulatory/compliance review, data-retention controls and institutional pilots.
 
 ## Vision
 
