@@ -5,20 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Trust Engine — Review Console</title>
   <style>
-    :root{--navy:#0b1f33;--gold:#c7a34b;--cream:#f7f5ef;--ink:#172536;--muted:#667085;--line:#dfe3e8;--green:#167a5b;--red:#b42318}
+    :root{--navy:#0b1f33;--gold:#c7a34b;--cream:#f7f5ef;--ink:#172536;--muted:#667085;--line:#dfe3e8;--green:#167a5b;--red:#b42318;--amber:#9a5b00}
     *{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
-    header{background:var(--navy);color:#fff;padding:24px 6vw;display:flex;justify-content:space-between;align-items:center;gap:20px} header strong{font-size:20px;letter-spacing:.2px} header span{color:#d9c27a;font-size:13px}
-    main{max-width:1100px;margin:32px auto;padding:0 20px}.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 4px 18px #0b1f330b}
-    h1{margin:0 0 6px;font-size:28px}.sub{color:var(--muted);margin:0 0 24px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}label{display:block;font-weight:650;font-size:13px;margin-bottom:6px}input,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}textarea{min-height:150px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px}
-    button{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:700;cursor:pointer}button:hover{opacity:.92}.status{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:750;font-size:12px}.verified{background:#e6f4ee;color:var(--green)}.review_required{background:#fff1df;color:#9a5b00}.rejected{background:#fde8e7;color:var(--red)}
-    .score{font-size:42px;font-weight:800;margin:4px 0}.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.check{border:1px solid var(--line);border-radius:10px;padding:12px}.check b{display:block}.ok{color:var(--green)}.bad{color:var(--red)}pre{white-space:pre-wrap;word-break:break-word;background:#101923;color:#e7edf4;border-radius:10px;padding:16px;overflow:auto}.hidden{display:none}.error{color:var(--red);font-weight:650}
-    @media(max-width:700px){.grid,.checks{grid-template-columns:1fr}header{padding:20px}.panel{padding:18px}h1{font-size:23px}}
+    header{background:var(--navy);color:#fff;padding:22px 6vw;display:flex;justify-content:space-between;align-items:center;gap:20px} header strong{font-size:20px;letter-spacing:.2px} header span{color:#d9c27a;font-size:13px}
+    main{max-width:1150px;margin:30px auto;padding:0 20px}.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 4px 18px #0b1f330b}
+    h1{margin:0 0 6px;font-size:28px}.sub{color:var(--muted);margin:0 0 24px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}label{display:block;font-weight:650;font-size:13px;margin-bottom:6px}input,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}textarea{min-height:180px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px}
+    button{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:700;cursor:pointer}button.secondary{background:#fff;color:var(--navy);border:1px solid var(--navy)}button:hover{opacity:.92}.actions{display:flex;gap:10px;flex-wrap:wrap}
+    .status{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:750;font-size:12px}.verified{background:#e6f4ee;color:var(--green)}.review_required{background:#fff1df;color:var(--amber)}.rejected{background:#fde8e7;color:var(--red)}
+    .score{font-size:42px;font-weight:800;margin:4px 0}.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.check{border:1px solid var(--line);border-radius:10px;padding:12px}.check b{display:block}.ok{color:var(--green)}.bad{color:var(--red)}pre{white-space:pre-wrap;word-break:break-word;background:#101923;color:#e7edf4;border-radius:10px;padding:16px;overflow:auto}.hidden{display:none}.error{color:var(--red);font-weight:650}.history-row{border-top:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;gap:15px;align-items:center}.history-row:first-child{border-top:0}.history-meta{color:var(--muted);font-size:13px}
+    @media(max-width:700px){.grid,.checks{grid-template-columns:1fr}header{padding:18px 20px}header span{display:none}.panel{padding:18px}h1{font-size:23px}.history-row{align-items:flex-start;flex-direction:column}}
   </style>
 </head>
 <body>
-<header><strong>African Financial Trust — Trust Engine</strong><span>Evidence Review Console</span></header>
+<header><strong>African Financial Trust — Trust Engine</strong><span>Evidence Review Console · MVP 1.0</span></header>
 <main>
-  <section class="panel"><h1>Verify a transaction</h1><p class="sub">Submit an invoice and its evidence. The engine returns an explainable verification result for human review.</p>
+  <section class="panel"><h1>Verify a transaction</h1><p class="sub">Submit an invoice and its supporting evidence. The engine persists the transaction, checks the evidence, and creates an auditable decision record.</p>
     <div class="grid"><div><label for="invoice">Invoice JSON</label><textarea id="invoice">{
   "invoice_number":"INV-1001",
   "supplier_name":"Supplier Ltd",
@@ -38,20 +39,27 @@
   "currency":"USD",
   "evidence_date":"2026-01-08",
   "description":"Purchase order"
+},{
+  "evidence_id":"PAY-1001",
+  "evidence_type":"payment_record",
+  "reference_number":"PAY-1001",
+  "supplier_name":"Supplier Ltd",
+  "buyer_name":"Buyer Ltd",
+  "amount":"10000.00",
+  "currency":"USD",
+  "evidence_date":"2026-01-12",
+  "description":"Payment record"
 }]</textarea></div></div>
-    <p><button id="run">Run verification</button></p><div id="error" class="error"></div>
+    <p class="actions"><button id="run">Submit &amp; verify</button><button class="secondary" id="loadHistory">Load audit history</button></p><div id="error" class="error"></div>
   </section>
-  <section id="result" class="panel hidden"><div style="display:flex;justify-content:space-between;align-items:start;gap:15px"><div><h1 id="decision">—</h1><p class="sub" id="meta"></p></div><span id="badge" class="status">—</span></div><div class="score" id="score">—</div><div id="scoreLabel" class="sub">verification score</div><div class="checks" id="checks"></div><h3>Failed / review items</h3><pre id="failed">[]</pre><h3>Evidence attribution</h3><pre id="supporting">{}</pre><h3>Audit record</h3><pre id="audit">—</pre></section>
+  <section id="result" class="panel hidden"><div style="display:flex;justify-content:space-between;align-items:start;gap:15px"><div><h1 id="decision">—</h1><p class="sub" id="meta"></p></div><span id="badge" class="status">—</span></div><div class="score" id="score">—</div><div class="sub">verification score</div><div class="checks" id="checks"></div><h3>Failed / review items</h3><pre id="failed">[]</pre><h3>Evidence attribution</h3><pre id="supporting">{}</pre><h3>Audit record</h3><pre id="audit">—</pre></section>
+  <section id="history" class="panel hidden"><h1>Audit history</h1><p class="sub" id="historyMeta"></p><div id="historyRows"></div></section>
 </main>
 <script>
 const $=id=>document.getElementById(id);
-$('run').onclick=async()=>{ $('error').textContent=''; $('result').classList.add('hidden'); try{
-  const invoice=JSON.parse($('invoice').value), evidence=JSON.parse($('evidence').value);
-  const r=await fetch('/verify-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoice,evidence})});
-  const body=await r.json(); if(!r.ok) throw new Error(body.detail?JSON.stringify(body.detail):'Verification failed');
-  const v=body.verification; $('decision').textContent=body.decision.replace('_',' '); $('meta').textContent=`Invoice ${body.invoice_number} · Audit #${body.audit_id}`; $('badge').textContent=body.decision; $('badge').className=`status ${body.decision}`; $('score').textContent=`${v.verification_score}%`;
-  $('checks').innerHTML=Object.entries(v.checks).map(([k,val])=>`<div class="check"><b>${k.replaceAll('_',' ')}</b><span class="${val?'ok':'bad'}">${val?'PASS':'FAIL / NOT ESTABLISHED'}</span></div>`).join('');
-  $('failed').textContent=JSON.stringify({failed_checks:v.failed_checks,conflicts:v.conflicts,incomplete_checks:v.incomplete_checks},null,2); $('supporting').textContent=JSON.stringify(v.supporting_evidence,null,2); $('audit').textContent=JSON.stringify({audit_id:body.audit_id,decision:body.decision,score:v.verification_score,evidence_ids:body.evidence_ids},null,2); $('result').classList.remove('hidden');
- }catch(e){$('error').textContent=e.message}}
+function renderResult(body){const v=body.verification;$('decision').textContent=body.decision.replace('_',' ');$('meta').textContent=`Invoice ${body.invoice_number} · Audit #${body.audit_id}`;$('badge').textContent=body.decision;$('badge').className=`status ${body.decision}`;$('score').textContent=`${v.verification_score}%`;$('checks').innerHTML=Object.entries(v.checks).map(([k,val])=>`<div class="check"><b>${k.replaceAll('_',' ')}</b><span class="${val?'ok':'bad'}">${val?'PASS':'FAIL / NOT ESTABLISHED'}</span></div>`).join('');$('failed').textContent=JSON.stringify({failed_checks:v.failed_checks,conflicts:v.conflicts,incomplete_checks:v.incomplete_checks},null,2);$('supporting').textContent=JSON.stringify(v.supporting_evidence,null,2);$('audit').textContent=JSON.stringify({audit_id:body.audit_id,decision:body.decision,score:v.verification_score,evidence_ids:body.evidence_ids},null,2);$('result').classList.remove('hidden')}
+$('run').onclick=async()=>{$('error').textContent='';try{const invoice=JSON.parse($('invoice').value),evidence=JSON.parse($('evidence').value);const r=await fetch('/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoice,evidence})});const body=await r.json();if(!r.ok)throw new Error(body.detail?JSON.stringify(body.detail):'Verification failed');renderResult(body);loadHistory(invoice.invoice_number)}catch(e){$('error').textContent=e.message}};
+async function loadHistory(invoiceNumber){invoiceNumber=invoiceNumber||JSON.parse($('invoice').value).invoice_number;$('error').textContent='';try{const r=await fetch(`/audits/${encodeURIComponent(invoiceNumber)}`),body=await r.json();if(!r.ok)throw new Error(body.detail||'Could not load audit history');$('historyMeta').textContent=`${body.count} audit record(s) for ${body.invoice_number}`;$('historyRows').innerHTML=body.audits.length?body.audits.map(a=>`<div class="history-row"><div><strong>Audit #${a.audit_id}</strong><div class="history-meta">${a.created_at} · ${a.passed_checks}/${a.total_checks} checks</div></div><span class="status ${a.decision}">${a.decision}</span></div>`).join(''):'<p class="sub">No audit records yet.</p>';$('history').classList.remove('hidden')}catch(e){$('error').textContent=e.message}}
+$('loadHistory').onclick=()=>loadHistory();
 </script>
 </body></html>
