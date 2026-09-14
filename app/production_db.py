@@ -64,6 +64,17 @@ class Document(Base):
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+class IntegrationEvent(Base):
+    __tablename__ = "integration_events"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    event_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    normalized_json: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    __table_args__ = (UniqueConstraint("organization_id", "provider", "event_key", name="uq_integration_event"),)
+
 
 def init_production_db():
     Base.metadata.create_all(engine)
