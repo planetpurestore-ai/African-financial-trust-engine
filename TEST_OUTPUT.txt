@@ -1,0 +1,82 @@
+.F........................F......                                        [100%]
+=================================== FAILURES ===================================
+______________________ test_dashboard_routes_return_html _______________________
+
+    def test_dashboard_routes_return_html():
+        root = client.get("/")
+        dashboard = client.get("/dashboard")
+        assert root.status_code == 200
+        assert dashboard.status_code == 200
+        assert "Trust Engine" in root.text
+>       assert "Verify a transaction" in dashboard.text
+E       assert 'Verify a transaction' in '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width,in...\'error\').textContent=e.message}};\n$(\'refresh\').onclick=refreshAll;if(apiKey)connect();\n</script></body></html>\n'
+E        +  where '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width,in...\'error\').textContent=e.message}};\n$(\'refresh\').onclick=refreshAll;if(apiKey)connect();\n</script></body></html>\n' = <Response [200 OK]>.text
+
+tests/test_api.py:29: AssertionError
+____________________ test_production_transaction_round_trip ____________________
+
+    def test_production_transaction_round_trip():
+        org_response = client.post(
+            "/v1/organizations",
+            headers={"X-Bootstrap-Token": "test-bootstrap"},
+            json={"name": "Test Institution"},
+        )
+        assert org_response.status_code == 201
+        api_key = org_response.json()["api_key"]
+    
+        payload = {
+            "invoice": {
+                "invoice_number": "INV-1001",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "12500.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [
+                {
+                    "evidence_id": "PO-1001",
+                    "evidence_type": "purchase_order",
+                    "reference_number": "PO-1001",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": "12500.00",
+                    "currency": "USD",
+                    "evidence_date": "2026-09-14",
+                    "description": "Purchase order",
+                }
+            ],
+        }
+        response = client.post(
+            "/v1/transactions",
+            headers={"X-API-Key": api_key, "Idempotency-Key": "case-1001"},
+            json=payload,
+        )
+        assert response.status_code == 201
+        result = response.json()
+>       assert result["status"] == "verified"
+E       AssertionError: assert 'review_required' == 'verified'
+E         
+E         - verified
+E         + review_required
+
+tests/test_production_api.py:57: AssertionError
+=============================== warnings summary ===============================
+../../../../../opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../../opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/starlette/testclient.py:53
+  /opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_api.py::test_dashboard_routes_return_html - assert 'Verify a transaction' in '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width,in...\'error\').textContent=e.message}};\n$(\'refresh\').onclick=refreshAll;if(apiKey)connect();\n</script></body></html>\n'
+ +  where '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width,in...\'error\').textContent=e.message}};\n$(\'refresh\').onclick=refreshAll;if(apiKey)connect();\n</script></body></html>\n' = <Response [200 OK]>.text
+FAILED tests/test_production_api.py::test_production_transaction_round_trip - AssertionError: assert 'review_required' == 'verified'
+  
+  - verified
+  + review_required
+2 failed, 31 passed, 2 warnings in 1.03s
