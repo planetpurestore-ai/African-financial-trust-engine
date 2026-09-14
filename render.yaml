@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: african-financial-trust-engine
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trust-engine-db
+          property: connectionString
+      - key: API_KEY_PEPPER
+        generateValue: true
+      - key: BOOTSTRAP_TOKEN
+        generateValue: true
+
+databases:
+  - name: trust-engine-db
+    plan: free
+    region: frankfurt
+    databaseName: trust_engine
+    user: trust_engine
+    postgresMajorVersion: "18"

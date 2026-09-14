@@ -44,13 +44,13 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
 
     passed = sum(checks.values())
     total = len(CHECK_NAMES)
-    status = "verified" if passed == total and not conflicts and not incomplete_checks else "review_required"
-    # Conflicting evidence means every individual check was successfully evaluated,
-    # even though one check has contradictory results and therefore requires review.
-    if conflicts:
-        verification_score = 100.0
-    else:
-        verification_score = round((passed / total) * 100, 2)
+    verified = passed == total and not conflicts and not incomplete_checks
+    status = "verified" if verified else "review_required"
+
+    # A conflict is not a successful verification. The score measures checks that
+    # currently support the invoice; the separate conflict list prevents a high
+    # score from being mistaken for a final approval.
+    verification_score = round((passed / total) * 100, 2)
 
     failed_checks = [name for name, value in checks.items() if not value]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
