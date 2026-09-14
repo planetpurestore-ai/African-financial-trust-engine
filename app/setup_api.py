@@ -1,6 +1,7 @@
 import hashlib
 import os
 import secrets
+import time
 import uuid
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,6 +17,18 @@ def _hash_key(key: str) -> str:
     if not pepper:
         raise RuntimeError("API_KEY_PEPPER is required")
     return hashlib.sha256((pepper + key).encode()).hexdigest()
+
+
+def _check_token(token: str, expected_env: str, expires_env: str) -> None:
+    expected = os.getenv(expected_env)
+    expires = os.getenv(expires_env)
+    if not expected or not expires or not secrets.compare_digest(token, expected):
+        raise HTTPException(403, "Invalid recovery token")
+    try:
+        if time.time() >= float(expires):
+            raise HTTPException(403, "Recovery token has expired")
+    except ValueError:
+        raise HTTPException(500, "Recovery configuration is invalid")
 
 
 @router.get("/setup")
@@ -43,6 +56,40 @@ def initial_setup(token: str = Query(..., min_length=10)):
             "organization_name": org.name,
             "api_key": raw_key,
             "warning": "Save this API key now. It is shown only once."
+        }
+    finally:
+        db.close()
+
+
+@router.get("/recover")
+def recover_api_key(token: str = Query(..., min_length=20)):
+    """Issue a fresh API key for the existing primary organization.
+
+    Access requires a short-lived recovery token supplied only through Render.
+    All previously active keys for the organization are revoked before the new
+    key is created, so the endpoint cannot create an accumulating set of keys.
+    """
+    _check_token(token, "RECOVERY_TOKEN", "RECOVERY_EXPIRES_AT")
+
+    db = SessionLocal()
+    try:
+        org = db.scalar(select(Organization).order_by(Organization.created_at.asc()).limit(1))
+        if not org:
+            raise HTTPException(404, "No organization exists")
+
+        active_keys = db.scalars(select(ApiKey).where(ApiKey.organization_id == org.id, ApiKey.active == 1)).all()
+        for key in active_keys:
+            key.active = 0
+
+        raw_key = "aft_live_" + secrets.token_urlsafe(32)
+        db.add(ApiKey(organization_id=org.id, key_hash=_hash_key(raw_key), label="recovery"))
+        db.commit()
+        return {
+            "status": "recovered",
+            "organization_id": org.id,
+            "organization_name": org.name,
+            "api_key": raw_key,
+            "warning": "This recovery token expires automatically. Save this API key now; it is shown only once."
         }
     finally:
         db.close()
