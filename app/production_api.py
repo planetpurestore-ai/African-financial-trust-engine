@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 import uuid
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
@@ -39,12 +39,15 @@ def require_api_key(x_api_key: str | None = Header(default=None), db: Session = 
         raise HTTPException(401, "Invalid API key")
     return db.get(Organization, key.organization_id)
 
+
 class ProductionTransaction(BaseModel):
     invoice: Invoice
     evidence: list[Evidence] = Field(min_length=1, max_length=100)
 
+
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
+
 
 @router.post("/organizations", status_code=201)
 def create_organization(body: OrganizationCreate, x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"), db: Session = Depends(db_session)):
@@ -59,11 +62,19 @@ def create_organization(body: OrganizationCreate, x_bootstrap_token: str | None 
     db.commit()
     return {"organization_id": org.id, "api_key": raw_key, "warning": "Store this API key now; it is shown only once."}
 
+
 @router.post("/transactions", status_code=201)
-def create_transaction(body: ProductionTransaction, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+def create_transaction(
+    body: ProductionTransaction,
+    response: Response,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     if idempotency_key:
         existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
         if existing:
+            response.status_code = 200
             return _transaction_response(existing, db)
     evidence_ids = [e.evidence_id for e in body.evidence]
     if len(evidence_ids) != len(set(evidence_ids)):
@@ -84,9 +95,11 @@ def create_transaction(body: ProductionTransaction, organization: Organization =
     db.commit()
     return _transaction_response(tx, db)
 
+
 def _transaction_response(tx: Transaction, db: Session):
     audit = db.scalar(select(AuditEvent).where(AuditEvent.transaction_id == tx.id).order_by(desc(AuditEvent.id)))
     return {"transaction_id": tx.id, "invoice_number": tx.invoice_number, "status": tx.status, "audit_id": audit.id if audit else None, "audit_hash": audit.event_hash if audit else None, "verification": json.loads(audit.result_json) if audit else None, "created_at": tx.created_at.isoformat()}
+
 
 @router.get("/transactions/{transaction_id}")
 def get_transaction(transaction_id: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
@@ -95,11 +108,13 @@ def get_transaction(transaction_id: str, organization: Organization = Depends(re
         raise HTTPException(404, "Transaction not found")
     return _transaction_response(tx, db)
 
+
 @router.get("/transactions")
 def list_transactions(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
     limit = max(1, min(limit, 100))
     rows = db.scalars(select(Transaction).where(Transaction.organization_id == organization.id).order_by(desc(Transaction.created_at)).limit(limit)).all()
     return {"count": len(rows), "transactions": [_transaction_response(row, db) for row in rows]}
+
 
 @router.get("/audits/{transaction_id}")
 def get_audit(transaction_id: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
