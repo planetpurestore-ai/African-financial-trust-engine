@@ -44,7 +44,18 @@ def test_production_transaction_round_trip():
                 "currency": "USD",
                 "evidence_date": "2026-09-14",
                 "description": "Purchase order",
-            }
+            },
+            {
+                "evidence_id": "PAY-1001",
+                "evidence_type": "payment_record",
+                "reference_number": "PAY-1001",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "12500.00",
+                "currency": "USD",
+                "evidence_date": "2026-09-14",
+                "description": "Payment record",
+            },
         ],
     }
     response = client.post(
