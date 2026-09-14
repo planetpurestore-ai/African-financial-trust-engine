@@ -12,7 +12,7 @@
 <main>
 <section class="panel"><h1>Connection</h1><p class="sub">Use an organization API key. The key stays in this browser and is sent only to this engine.</p><label for="key">X-API-Key</label><input id="key" type="password" autocomplete="off" placeholder="aft_live_…"><div class="actions"><button id="connect">Connect</button><button class="secondary" id="health">Check engine health</button></div><p id="conn"></p></section>
 <section class="panel hidden" id="workspace"><div class="cards"><div class="card"><div class="sub">Engine</div><div class="metric" id="engine">—</div></div><div class="card"><div class="sub">Transactions</div><div class="metric" id="txCount">—</div></div><div class="card"><div class="sub">Documents</div><div class="metric" id="docCount">—</div></div></div></section>
-<section class="panel hidden" id="verify"><h1>Verify transaction</h1><p class="sub">Submit structured invoice evidence to the production verification API.</p><div class="grid"><div><label>Invoice JSON</label><textarea id="invoice">{
+<section class="panel hidden" id="verify"><h1>Verify a transaction</h1><p class="sub">Submit structured invoice evidence to the production verification API.</p><div class="grid"><div><label>Invoice JSON</label><textarea id="invoice">{
   "invoice_number":"INV-1001",
   "supplier_name":"Supplier Ltd",
   "buyer_name":"Buyer Ltd",
