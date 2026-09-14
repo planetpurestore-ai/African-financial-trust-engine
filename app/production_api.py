@@ -1,10 +1,9 @@
 import hashlib
-import hmac
 import json
 import os
 import secrets
 import uuid
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
@@ -26,16 +25,18 @@ def db_session():
 
 
 def _hash_key(key: str) -> str:
-    pepper = os.getenv("API_KEY_PEPPER", "")
+    pepper = os.getenv("API_KEY_PEPPER")
+    if not pepper:
+        raise RuntimeError("API_KEY_PEPPER is required")
     return hashlib.sha256((pepper + key).encode()).hexdigest()
 
 
 def require_api_key(x_api_key: str | None = Header(default=None), db: Session = Depends(db_session)) -> Organization:
     if not x_api_key:
-        raise HTTPException(status_code=401, detail="X-API-Key header is required")
+        raise HTTPException(401, "X-API-Key header is required")
     key = db.scalar(select(ApiKey).where(ApiKey.key_hash == _hash_key(x_api_key), ApiKey.active == 1))
     if not key:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(401, "Invalid API key")
     return db.get(Organization, key.organization_id)
 
 class ProductionTransaction(BaseModel):
@@ -46,23 +47,20 @@ class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
 
 @router.post("/organizations", status_code=201)
-def create_organization(body: OrganizationCreate, db: Session = Depends(db_session)):
+def create_organization(body: OrganizationCreate, x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"), db: Session = Depends(db_session)):
+    expected = os.getenv("BOOTSTRAP_TOKEN")
+    if not expected or not x_bootstrap_token or not secrets.compare_digest(x_bootstrap_token, expected):
+        raise HTTPException(403, "Bootstrap authorization required")
     org = Organization(name=body.name.strip())
     db.add(org)
-    db.commit()
-    db.refresh(org)
+    db.flush()
     raw_key = "aft_live_" + secrets.token_urlsafe(32)
     db.add(ApiKey(organization_id=org.id, key_hash=_hash_key(raw_key), label="initial"))
     db.commit()
     return {"organization_id": org.id, "api_key": raw_key, "warning": "Store this API key now; it is shown only once."}
 
 @router.post("/transactions", status_code=201)
-def create_transaction(
-    body: ProductionTransaction,
-    organization: Organization = Depends(require_api_key),
-    db: Session = Depends(db_session),
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-):
+def create_transaction(body: ProductionTransaction, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
     if idempotency_key:
         existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
         if existing:
@@ -79,15 +77,15 @@ def create_transaction(
     db.flush()
     previous = db.scalar(select(AuditEvent).where(AuditEvent.organization_id == organization.id).order_by(desc(AuditEvent.id)))
     previous_hash = previous.event_hash if previous else "0" * 64
-    canonical = f"{previous_hash}|{tx.id}|{decision}|{result['verification_score']}|{json.dumps(result, sort_keys=True, separators=(',', ':'))}"
+    result_json = json.dumps(result, sort_keys=True, separators=(",", ":"))
+    canonical = f"{previous_hash}|{tx.id}|{decision}|{result['verification_score']}|{result_json}"
     event_hash = hashlib.sha256(canonical.encode()).hexdigest()
-    db.add(AuditEvent(organization_id=organization.id, transaction_id=tx.id, decision=decision, score=result["verification_score"], result_json=json.dumps(result), previous_hash=previous_hash, event_hash=event_hash))
+    db.add(AuditEvent(organization_id=organization.id, transaction_id=tx.id, decision=decision, score=result["verification_score"], result_json=result_json, previous_hash=previous_hash, event_hash=event_hash))
     db.commit()
     return _transaction_response(tx, db)
 
 def _transaction_response(tx: Transaction, db: Session):
     audit = db.scalar(select(AuditEvent).where(AuditEvent.transaction_id == tx.id).order_by(desc(AuditEvent.id)))
-    payload = json.loads(tx.payload)
     return {"transaction_id": tx.id, "invoice_number": tx.invoice_number, "status": tx.status, "audit_id": audit.id if audit else None, "audit_hash": audit.event_hash if audit else None, "verification": json.loads(audit.result_json) if audit else None, "created_at": tx.created_at.isoformat()}
 
 @router.get("/transactions/{transaction_id}")
