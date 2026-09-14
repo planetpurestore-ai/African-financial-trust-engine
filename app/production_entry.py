@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.production_db import init_production_db, SessionLocal
 from app.production_api import router
 from app.api_docs import router as system_router
+from app.setup_api import router as setup_router
 from app.security import request_size_guard, allowed_origins
 
 init_production_db()
@@ -32,6 +33,7 @@ app.middleware("http")(request_size_guard)
 
 app.include_router(system_router)
 app.include_router(router)
+app.include_router(setup_router)
 
 @app.get("/", include_in_schema=False)
 def root_dashboard():
