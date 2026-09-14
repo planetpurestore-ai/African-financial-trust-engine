@@ -2,7 +2,6 @@ import hashlib
 import os
 import secrets
 import time
-import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
@@ -63,7 +62,7 @@ def initial_setup(token: str = Query(..., min_length=10)):
 
 @router.get("/recover")
 def recover_api_key(token: str = Query(..., min_length=20)):
-    """Issue a fresh API key for the existing primary organization.
+    """Issue a fresh API key, bootstrapping the primary organization if needed.
 
     Access requires a short-lived recovery token supplied only through Render.
     All previously active keys for the organization are revoked before the new
@@ -75,9 +74,13 @@ def recover_api_key(token: str = Query(..., min_length=20)):
     try:
         org = db.scalar(select(Organization).order_by(Organization.created_at.asc()).limit(1))
         if not org:
-            raise HTTPException(404, "No organization exists")
+            org = Organization(name="African Financial Trust")
+            db.add(org)
+            db.flush()
 
-        active_keys = db.scalars(select(ApiKey).where(ApiKey.organization_id == org.id, ApiKey.active == 1)).all()
+        active_keys = db.scalars(
+            select(ApiKey).where(ApiKey.organization_id == org.id, ApiKey.active == 1)
+        ).all()
         for key in active_keys:
             key.active = 0
 
