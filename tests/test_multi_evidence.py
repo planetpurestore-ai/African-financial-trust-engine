@@ -73,6 +73,6 @@ def test_conflicting_evidence_requires_review():
     )
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 100.0
+    assert result["verification_score"] == 75.0
     assert result["conflicts"] == ["amount_match"]
     assert "conflict:amount_match" in result["failed_checks"]
