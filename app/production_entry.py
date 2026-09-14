@@ -1,18 +1,35 @@
+import os
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from app.production_db import init_production_db, SessionLocal
 from app.production_api import router
 from app.api_docs import router as system_router
+from app.security import request_size_guard, allowed_origins
 
 init_production_db()
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
-    version="2.2.0",
+    version="2.3.0",
     description="Production verification infrastructure for African commercial transactions.",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
+
+origins = allowed_origins()
+if origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key"],
+    )
+app.middleware("http")(request_size_guard)
+
 app.include_router(system_router)
 app.include_router(router)
 
@@ -21,7 +38,7 @@ def health():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "service": "trust-engine", "version": "2.2.0", "database": "ok"}
+        return {"status": "ok", "service": "trust-engine", "version": "2.3.0", "database": "ok"}
     finally:
         db.close()
 
