@@ -13,7 +13,7 @@ from app.verification import compare_invoice_to_evidence_set
 from app.risk_engine import assess
 from app.production_db import SessionLocal, Organization, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
-from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event
+from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
 
 router = APIRouter(prefix="/v1", tags=["production"])
 
@@ -137,7 +137,7 @@ def create_integration(provider: str, organization: Organization = Depends(requi
     existing = db.scalar(select(IntegrationCredential).where(IntegrationCredential.organization_id == organization.id, IntegrationCredential.provider == provider, IntegrationCredential.active == 1))
     if existing:
         raise HTTPException(409, "Active integration already exists; rotate/revoke it before creating another")
-    secret = "aft_wh_" + secrets.token_urlsafe(36)
+    secret = webhook_secret_for(organization.id, provider)
     db.add(IntegrationCredential(organization_id=organization.id, provider=provider, secret_hash=_hash_secret(secret), active=1)); db.commit()
     return {"provider": provider, "webhook_secret": secret, "webhook_url": f"/v1/integrations/{provider}/webhook", "signature_header": "X-Webhook-Signature", "signature_format": "sha256=<hex-hmac-sha256-body>", "warning": "Store the webhook secret now; it is shown only once."}
 
@@ -155,19 +155,12 @@ async def receive_financial_webhook(provider: str, request: Request, x_organizat
     if not credential:
         raise HTTPException(404, "Active integration not found")
     raw = await request.body()
-    expected = hmac_secret = None
-    # Reuse the same HMAC implementation but with this organization's secret hash verified below.
     payload_signature = (x_webhook_signature or "").removeprefix("sha256=").strip()
-    if not payload_signature:
-        raise HTTPException(401, "X-Webhook-Signature is required")
+    if len(payload_signature) != 64:
+        raise HTTPException(401, "Invalid webhook signature")
     payload = hashlib.sha256(raw).hexdigest()
-    # Recovering a secret is intentionally impossible. We verify against a provider adapter
-    # secret supplied through a short-lived integration secret is not possible from its hash,
-    # so the production connector accepts HMAC only when a configured provider secret is used.
-    # This endpoint therefore expects WEBHOOK_SECRET_<PROVIDER> for external providers.
-    env_name = "WEBHOOK_SECRET_" + "".join(c if c.isalnum() else "_" for c in provider.upper())
-    provider_secret = os.getenv(env_name)
-    if not provider_secret or not verify_webhook_signature(raw, x_webhook_signature, provider_secret):
+    secret = webhook_secret_for(x_organization_id, provider)
+    if not verify_webhook_signature(raw, x_webhook_signature, secret):
         raise HTTPException(401, "Invalid webhook signature")
     try:
         body = json.loads(raw.decode("utf-8"))
