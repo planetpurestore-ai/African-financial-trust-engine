@@ -1,26 +1,18 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Trust Engine — Review Console</title>
-  <style>
-    :root{--navy:#0b1f33;--gold:#c7a34b;--cream:#f7f5ef;--ink:#172536;--muted:#667085;--line:#dfe3e8;--green:#167a5b;--red:#b42318;--amber:#9a5b00}
-    *{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
-    header{background:var(--navy);color:#fff;padding:22px 6vw;display:flex;justify-content:space-between;align-items:center;gap:20px} header strong{font-size:20px;letter-spacing:.2px} header span{color:#d9c27a;font-size:13px}
-    main{max-width:1150px;margin:30px auto;padding:0 20px}.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 4px 18px #0b1f330b}
-    h1{margin:0 0 6px;font-size:28px}.sub{color:var(--muted);margin:0 0 24px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}label{display:block;font-weight:650;font-size:13px;margin-bottom:6px}input,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}textarea{min-height:180px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px}
-    button{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:700;cursor:pointer}button.secondary{background:#fff;color:var(--navy);border:1px solid var(--navy)}button:hover{opacity:.92}.actions{display:flex;gap:10px;flex-wrap:wrap}
-    .status{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:750;font-size:12px}.verified{background:#e6f4ee;color:var(--green)}.review_required{background:#fff1df;color:var(--amber)}.rejected{background:#fde8e7;color:var(--red)}
-    .score{font-size:42px;font-weight:800;margin:4px 0}.checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.check{border:1px solid var(--line);border-radius:10px;padding:12px}.check b{display:block}.ok{color:var(--green)}.bad{color:var(--red)}pre{white-space:pre-wrap;word-break:break-word;background:#101923;color:#e7edf4;border-radius:10px;padding:16px;overflow:auto}.hidden{display:none}.error{color:var(--red);font-weight:650}.history-row{border-top:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;gap:15px;align-items:center}.history-row:first-child{border-top:0}.history-meta{color:var(--muted);font-size:13px}
-    @media(max-width:700px){.grid,.checks{grid-template-columns:1fr}header{padding:18px 20px}header span{display:none}.panel{padding:18px}h1{font-size:23px}.history-row{align-items:flex-start;flex-direction:column}}
-  </style>
-</head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trust Engine — Operations Console</title>
+<style>
+:root{--navy:#0b1f33;--gold:#c7a34b;--cream:#f7f5ef;--ink:#172536;--muted:#667085;--line:#dfe3e8;--green:#167a5b;--red:#b42318;--amber:#9a5b00}
+*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}header{background:var(--navy);color:#fff;padding:20px 6vw;display:flex;justify-content:space-between;align-items:center;gap:15px}header strong{font-size:20px}header span{color:#d9c27a;font-size:13px}main{max-width:1150px;margin:28px auto;padding:0 18px}.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px;box-shadow:0 4px 18px #0b1f330b}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}h1{margin:0 0 6px;font-size:26px}.sub{color:var(--muted);margin:0 0 18px}label{display:block;font-weight:700;font-size:13px;margin:0 0 6px}input,textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font:inherit}textarea{min-height:160px;font-family:ui-monospace,monospace;font-size:12px}button{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:10px 16px;font-weight:700;cursor:pointer}button.secondary{background:#fff;color:var(--navy);border:1px solid var(--navy)}button.danger{background:var(--red)}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.ok{color:var(--green);font-weight:700}.err{color:var(--red);font-weight:700}.status{display:inline-block;padding:5px 10px;border-radius:999px;font-weight:750;font-size:12px}.verified{background:#e6f4ee;color:var(--green)}.review_required{background:#fff1df;color:var(--amber)}.rejected{background:#fde8e7;color:var(--red)}pre{white-space:pre-wrap;word-break:break-word;background:#101923;color:#e7edf4;border-radius:10px;padding:14px;overflow:auto}.hidden{display:none}.metric{font-size:34px;font-weight:800}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:10px;padding:14px}.list{display:grid;gap:8px}.row{border-top:1px solid var(--line);padding:11px 0;display:flex;justify-content:space-between;gap:10px}.row:first-child{border-top:0}@media(max-width:700px){.grid,.cards{grid-template-columns:1fr}header{padding:18px 20px}header span{display:none}.panel{padding:17px}}
+</style></head>
 <body>
-<header><strong>African Financial Trust — Trust Engine</strong><span>Evidence Review Console · MVP 1.0</span></header>
+<header><strong>African Financial Trust — Trust Engine</strong><span>Production Operations Console</span></header>
 <main>
-  <section class="panel"><h1>Verify a transaction</h1><p class="sub">Submit an invoice and its supporting evidence. The engine persists the transaction, checks the evidence, and creates an auditable decision record.</p>
-    <div class="grid"><div><label for="invoice">Invoice JSON</label><textarea id="invoice">{
+<section class="panel"><h1>Connection</h1><p class="sub">Use an organization API key. The key stays in this browser and is sent only to this engine.</p><label for="key">X-API-Key</label><input id="key" type="password" autocomplete="off" placeholder="aft_live_…"><div class="actions"><button id="connect">Connect</button><button class="secondary" id="health">Check engine health</button></div><p id="conn"></p></section>
+<section class="panel hidden" id="workspace"><div class="cards"><div class="card"><div class="sub">Engine</div><div class="metric" id="engine">—</div></div><div class="card"><div class="sub">Transactions</div><div class="metric" id="txCount">—</div></div><div class="card"><div class="sub">Documents</div><div class="metric" id="docCount">—</div></div></div></section>
+<section class="panel hidden" id="verify"><h1>Verify transaction</h1><p class="sub">Submit structured invoice evidence to the production verification API.</p><div class="grid"><div><label>Invoice JSON</label><textarea id="invoice">{
   "invoice_number":"INV-1001",
   "supplier_name":"Supplier Ltd",
   "buyer_name":"Buyer Ltd",
@@ -28,8 +20,7 @@
   "currency":"USD",
   "issue_date":"2026-01-10",
   "due_date":"2026-02-10"
-}</textarea></div>
-    <div><label for="evidence">Evidence JSON array</label><textarea id="evidence">[{
+}</textarea></div><div><label>Evidence JSON array</label><textarea id="evidence">[{
   "evidence_id":"PO-1001",
   "evidence_type":"purchase_order",
   "reference_number":"PO-1001",
@@ -49,17 +40,18 @@
   "currency":"USD",
   "evidence_date":"2026-01-12",
   "description":"Payment record"
-}]</textarea></div></div>
-    <p class="actions"><button id="run">Submit &amp; verify</button><button class="secondary" id="loadHistory">Load audit history</button></p><div id="error" class="error"></div>
-  </section>
-  <section id="result" class="panel hidden"><div style="display:flex;justify-content:space-between;align-items:start;gap:15px"><div><h1 id="decision">—</h1><p class="sub" id="meta"></p></div><span id="badge" class="status">—</span></div><div class="score" id="score">—</div><div class="sub">verification score</div><div class="checks" id="checks"></div><h3>Failed / review items</h3><pre id="failed">[]</pre><h3>Evidence attribution</h3><pre id="supporting">{}</pre><h3>Audit record</h3><pre id="audit">—</pre></section>
-  <section id="history" class="panel hidden"><h1>Audit history</h1><p class="sub" id="historyMeta"></p><div id="historyRows"></div></section>
+}]</textarea></div></div><div class="actions"><button id="run">Submit & verify</button><button class="secondary" id="refresh">Refresh history</button></div><p id="error" class="err"></p></section>
+<section class="panel hidden" id="result"><h1 id="decision">—</h1><p id="meta" class="sub"></p><span id="badge" class="status">—</span><div class="metric" id="score">—</div><div class="sub">verification score</div><h3>Decision evidence</h3><pre id="details"></pre></section>
+<section class="panel hidden" id="history"><h1>Recent transactions</h1><div id="rows" class="list"></div></section>
 </main>
 <script>
-const $=id=>document.getElementById(id);
-function renderResult(body){const v=body.verification;$('decision').textContent=body.decision.replace('_',' ');$('meta').textContent=`Invoice ${body.invoice_number} · Audit #${body.audit_id}`;$('badge').textContent=body.decision;$('badge').className=`status ${body.decision}`;$('score').textContent=`${v.verification_score}%`;$('checks').innerHTML=Object.entries(v.checks).map(([k,val])=>`<div class="check"><b>${k.replaceAll('_',' ')}</b><span class="${val?'ok':'bad'}">${val?'PASS':'FAIL / NOT ESTABLISHED'}</span></div>`).join('');$('failed').textContent=JSON.stringify({failed_checks:v.failed_checks,conflicts:v.conflicts,incomplete_checks:v.incomplete_checks},null,2);$('supporting').textContent=JSON.stringify(v.supporting_evidence,null,2);$('audit').textContent=JSON.stringify({audit_id:body.audit_id,decision:body.decision,score:v.verification_score,evidence_ids:body.evidence_ids},null,2);$('result').classList.remove('hidden')}
-$('run').onclick=async()=>{$('error').textContent='';try{const invoice=JSON.parse($('invoice').value),evidence=JSON.parse($('evidence').value);const r=await fetch('/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoice,evidence})});const body=await r.json();if(!r.ok)throw new Error(body.detail?JSON.stringify(body.detail):'Verification failed');renderResult(body);loadHistory(invoice.invoice_number)}catch(e){$('error').textContent=e.message}};
-async function loadHistory(invoiceNumber){invoiceNumber=invoiceNumber||JSON.parse($('invoice').value).invoice_number;$('error').textContent='';try{const r=await fetch(`/audits/${encodeURIComponent(invoiceNumber)}`),body=await r.json();if(!r.ok)throw new Error(body.detail||'Could not load audit history');$('historyMeta').textContent=`${body.count} audit record(s) for ${body.invoice_number}`;$('historyRows').innerHTML=body.audits.length?body.audits.map(a=>`<div class="history-row"><div><strong>Audit #${a.audit_id}</strong><div class="history-meta">${a.created_at} · ${a.passed_checks}/${a.total_checks} checks</div></div><span class="status ${a.decision}">${a.decision}</span></div>`).join(''):'<p class="sub">No audit records yet.</p>';$('history').classList.remove('hidden')}catch(e){$('error').textContent=e.message}}
-$('loadHistory').onclick=()=>loadHistory();
-</script>
-</body></html>
+const $=id=>document.getElementById(id);const stored=localStorage.getItem('aft_api_key');if(stored)$('key').value=stored;let apiKey=stored||'';
+function headers(extra={}){return Object.assign({'X-API-Key':apiKey},extra)}
+async function api(path,opts={}){const r=await fetch('/v1'+path,Object.assign({},opts,{headers:headers(opts.headers||{})}));let b={};try{b=await r.json()}catch{}if(!r.ok)throw new Error(b.detail||'Request failed');return b}
+async function connect(){apiKey=$('key').value.trim();if(!apiKey){$('conn').textContent='Enter an API key.';$('conn').className='err';return}localStorage.setItem('aft_api_key',apiKey);try{await api('/keys');$('conn').textContent='Connected.';$('conn').className='ok';$('workspace').classList.remove('hidden');$('verify').classList.remove('hidden');await refreshAll()}catch(e){$('conn').textContent=e.message;$('conn').className='err'}}
+async function refreshAll(){try{const [t,d]=await Promise.all([api('/transactions?limit=50'),api('/documents?limit=50')]);$('txCount').textContent=t.count;$('docCount').textContent=d.count;$('engine').textContent='ONLINE';renderHistory(t.transactions)}catch(e){$('conn').textContent=e.message;$('conn').className='err'}}
+function renderHistory(rows){$('history').classList.remove('hidden');$('rows').innerHTML=rows.length?rows.map(x=>`<div class="row"><div><b>${x.invoice_number}</b><div class="sub">${x.created_at} · audit ${x.audit_id||'—'}</div></div><span class="status ${x.status}">${x.status}</span></div>`).join(''):'<p class="sub">No transactions yet.</p>'}
+$('connect').onclick=connect;$('health').onclick=async()=>{try{const r=await fetch('/health');const b=await r.json();$('conn').textContent=`${b.status.toUpperCase()} · database ${b.database}`;$('conn').className='ok'}catch(e){$('conn').textContent='Health check failed';$('conn').className='err'}};
+$('run').onclick=async()=>{ $('error').textContent='';try{const invoice=JSON.parse($('invoice').value),evidence=JSON.parse($('evidence').value);const b=await api('/transactions',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},body:JSON.stringify({invoice,evidence})});const v=b.verification;$('decision').textContent=b.status.replaceAll('_',' ');$('meta').textContent=`Invoice ${b.invoice_number} · transaction ${b.transaction_id}`;$('badge').textContent=b.status;$('badge').className='status '+b.status;$('score').textContent=`${v.verification_score}%`;$('details').textContent=JSON.stringify({risk:v.risk,checks:v.checks,failed_checks:v.failed_checks,conflicts:v.conflicts,supporting_evidence:v.supporting_evidence,audit_hash:b.audit_hash},null,2);$('result').classList.remove('hidden');await refreshAll()}catch(e){$('error').textContent=e.message}};
+$('refresh').onclick=refreshAll;if(apiKey)connect();
+</script></body></html>
