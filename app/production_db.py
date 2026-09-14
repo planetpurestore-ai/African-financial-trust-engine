@@ -64,6 +64,16 @@ class Document(Base):
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+class IntegrationCredential(Base):
+    __tablename__ = "integration_credentials"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    secret_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    active: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    __table_args__ = (UniqueConstraint("organization_id", "provider", name="uq_integration_credential"),)
+
 class IntegrationEvent(Base):
     __tablename__ = "integration_events"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
