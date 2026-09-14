@@ -23,7 +23,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: Verify package path
+        run: python -c "import sys, app; print(sys.path); print(app.__file__)"
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
       - name: Run verification tests
         env:
-          PYTHONPATH: .
-        run: pytest -q
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m pytest -q
