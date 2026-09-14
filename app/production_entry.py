@@ -33,6 +33,10 @@ app.middleware("http")(request_size_guard)
 app.include_router(system_router)
 app.include_router(router)
 
+@app.get("/", include_in_schema=False)
+def root_dashboard():
+    return FileResponse(Path(__file__).with_name("dashboard.html"))
+
 @app.get("/health")
 def health():
     db = SessionLocal()
