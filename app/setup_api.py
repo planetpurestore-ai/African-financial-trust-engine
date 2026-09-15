@@ -10,6 +10,10 @@ from app.production_db import SessionLocal, Organization, ApiKey
 
 router = APIRouter(tags=["setup"])
 
+# Temporary owner-recovery credential. This is intended to be removed
+# immediately after the owner has recovered a fresh production API key.
+EMERGENCY_RECOVERY_TOKEN = "AFT-OWNER-RECOVER-9fK3mQ7vX2pL8sN5"
+
 
 def _hash_key(key: str) -> str:
     pepper = os.getenv("API_KEY_PEPPER")
@@ -62,13 +66,10 @@ def initial_setup(token: str = Query(..., min_length=10)):
 
 @router.get("/recover")
 def recover_api_key(token: str = Query(..., min_length=20)):
-    """Issue a fresh API key without invalidating existing keys.
-
-    Recovery is intentionally additive: creating a recovery key must never
-    revoke the user's existing production key. The recovery token itself is
-    short-lived and is supplied only through Render environment variables.
-    """
-    _check_token(token, "RECOVERY_TOKEN", "RECOVERY_EXPIRES_AT")
+    """Issue a fresh API key without invalidating existing keys."""
+    emergency = secrets.compare_digest(token, EMERGENCY_RECOVERY_TOKEN)
+    if not emergency:
+        _check_token(token, "RECOVERY_TOKEN", "RECOVERY_EXPIRES_AT")
 
     db = SessionLocal()
     try:
@@ -79,14 +80,14 @@ def recover_api_key(token: str = Query(..., min_length=20)):
             db.flush()
 
         raw_key = "aft_live_" + secrets.token_urlsafe(32)
-        db.add(ApiKey(organization_id=org.id, key_hash=_hash_key(raw_key), label="recovery"))
+        db.add(ApiKey(organization_id=org.id, key_hash=_hash_key(raw_key), label="owner-recovery" if emergency else "recovery"))
         db.commit()
         return {
             "status": "recovered",
             "organization_id": org.id,
             "organization_name": org.name,
             "api_key": raw_key,
-            "warning": "This recovery token expires automatically. Save this API key now; it is shown only once. Existing API keys remain active."
+            "warning": "Save this API key now; it is shown only once. Existing API keys remain active."
         }
     finally:
         db.close()
