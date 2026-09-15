@@ -52,8 +52,8 @@ def extract_fields(text: str) -> dict:
     amount = None
     if amount_raw:
         try:
-            amount = str(Decimal(amount_raw.replace(",", "")))
-        except InvalidOperation:
+            amount = float(Decimal(amount_raw.replace(",", "")))
+        except (InvalidOperation, ValueError):
             pass
     issue_raw = _first([r"(?:issue\s*date|invoice\s*date|date)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     due_raw = _first([r"(?:due\s*date|payment\s*due)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
