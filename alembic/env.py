@@ -7,11 +7,21 @@ from app.production_db import Base
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
-config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL", ""))
+
+def database_url():
+    url = os.environ.get("DATABASE_URL", "")
+    if url.startswith("postgres://"):
+        url = "postgresql+psycopg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+url = database_url()
+config.set_main_option("sqlalchemy.url", url)
 target_metadata = Base.metadata
 
 def run_migrations_offline():
-    context.configure(url=os.environ.get("DATABASE_URL", ""), target_metadata=target_metadata, literal_binds=True, compare_type=True)
+    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True)
     with context.begin_transaction():
         context.run_migrations()
 
