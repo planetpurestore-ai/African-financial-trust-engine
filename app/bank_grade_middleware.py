@@ -13,7 +13,8 @@ def _hash_key(value):
 def _required_scope(path, method):
     if path.startswith("/v1/organizations") or path.endswith("/webhook"): return None
     if path.startswith("/v1/bank-grade/controls"): return "bank-grade:admin"
-    if path.startswith("/v1/bank-grade"): return "bank-grade:read"
+    if path.startswith("/v1/bank-grade"):
+        return "bank-grade:read" if method in {"GET", "HEAD", "OPTIONS"} else "bank-grade:write"
     if path.startswith("/v1/audits") or "/audits/" in path: return "audits:read"
     if path.startswith("/v1/documents"): return "documents:read" if method=="GET" else "documents:write"
     if path.startswith("/v1/transactions"): return "transactions:read" if method=="GET" else "transactions:write"
@@ -45,7 +46,7 @@ async def bank_grade_security(request: Request, call_next):
         db.execute(text("CREATE TABLE IF NOT EXISTS api_key_policies (key_hash VARCHAR(128) PRIMARY KEY, organization_id INTEGER NOT NULL, expires_at TIMESTAMPTZ, scopes TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, last_used_at TIMESTAMPTZ)"))
         policy=db.execute(text("SELECT expires_at,scopes,revoked FROM api_key_policies WHERE key_hash=:h"),{"h":_hash_key(api_key)}).mappings().first()
         if not policy:
-            scopes="transactions:read,transactions:write,documents:read,documents:write,integrations:read,integrations:write,audits:read,bank-grade:read,bank-grade:admin"
+            scopes="transactions:read,transactions:write,documents:read,documents:write,integrations:read,integrations:write,audits:read,bank-grade:read,bank-grade:write,bank-grade:admin"
             db.execute(text("INSERT INTO api_key_policies(key_hash,organization_id,scopes) VALUES (:h,:o,:s)"),{"h":_hash_key(api_key),"o":row["organization_id"],"s":scopes}); db.commit()
             policy={"expires_at":None,"scopes":scopes,"revoked":0}
         if not row["active"] or policy["revoked"]: return JSONResponse({"detail":"API key has been revoked"},status_code=401)
