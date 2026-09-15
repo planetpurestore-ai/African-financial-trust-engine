@@ -1,6 +1,7 @@
 import hashlib
 import re
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -22,6 +23,27 @@ def _first(patterns, text):
     return None
 
 
+def _normalize_date(value):
+    if not value:
+        return None
+    value = value.strip()
+    formats = (
+        "%Y-%m-%d",
+        "%d %B %Y",
+        "%d %b %Y",
+        "%B %d, %Y",
+        "%b %d, %Y",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return value
+
+
 def extract_fields(text: str) -> dict:
     compact = re.sub(r"[ \t]+", " ", text)
     invoice_number = _first(
@@ -38,7 +60,7 @@ def extract_fields(text: str) -> dict:
     )
     currency = _first([r"\b(USD|EUR|GBP|RWF|KES|UGX|TZS|ZAR|GHS|NGN|XOF|XAF)\b"], compact)
     amount_raw = _first(
-        [r"(?:total|amount due|invoice total)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)"],
+        [r"(?:total\s*(?:due)?|amount\s*due|invoice\s*total)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)"],
         compact,
     )
     amount = None
@@ -47,14 +69,22 @@ def extract_fields(text: str) -> dict:
             amount = str(Decimal(amount_raw.replace(",", "")))
         except InvalidOperation:
             pass
-    issue = _first(
-        [r"(?:issue date|invoice date|date)\s*[:=]\s*(\d{4}-\d{2}-\d{2})"],
-        compact,
+
+    issue_raw = _first(
+        [
+            r"(?:issue\s*date|invoice\s*date|date)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"
+        ],
+        text,
     )
-    due = _first(
-        [r"(?:due date|payment due)\s*[:=]\s*(\d{4}-\d{2}-\d{2})"],
-        compact,
+    due_raw = _first(
+        [
+            r"(?:due\s*date|payment\s*due)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"
+        ],
+        text,
     )
+    issue = _normalize_date(issue_raw)
+    due = _normalize_date(due_raw)
+
     fields = {
         "invoice_number": invoice_number,
         "supplier_name": supplier_name,
