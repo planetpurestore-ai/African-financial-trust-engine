@@ -1,7 +1,17 @@
+from __future__ import annotations
+
 from app.models import Invoice
 from app.evidence import Evidence
 
 CHECK_NAMES = ("supplier_match", "buyer_match", "amount_match", "currency_match")
+CHECK_WEIGHTS = {
+    "supplier_match": 15.0,
+    "buyer_match": 15.0,
+    "amount_match": 15.0,
+    "currency_match": 15.0,
+}
+COMMERCIAL_EVIDENCE_WEIGHT = 20.0
+PAYMENT_EVIDENCE_WEIGHT = 20.0
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -25,7 +35,7 @@ def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool
     }
 
 
-def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
+def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_items: list[Evidence] | None = None) -> dict:
     checks: dict[str, bool] = {}
     conflicts: list[str] = []
     incomplete_checks: list[str] = []
@@ -43,17 +53,36 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
             incomplete_checks.append(name)
 
     passed = sum(checks.values())
-    total = len(CHECK_NAMES)
-    verified = passed == total and not conflicts and not incomplete_checks
-    status = "verified" if verified else "review_required"
+    core_score = sum(CHECK_WEIGHTS[name] for name, value in checks.items() if value)
 
-    # A conflict is not a successful verification. The score measures checks that
-    # currently support the invoice; the separate conflict list prevents a high
-    # score from being mistaken for a final approval.
-    verification_score = round((passed / total) * 100, 2)
+    items = evidence_items or []
+    has_commercial = any(e.evidence_type in {"purchase_order", "contract"} for e in items)
+    has_payment = any(e.evidence_type == "payment_record" for e in items)
+
+    verification_score = core_score
+    if has_commercial:
+        verification_score += COMMERCIAL_EVIDENCE_WEIGHT
+    if has_payment:
+        verification_score += PAYMENT_EVIDENCE_WEIGHT
+
+    # Conflicting evidence must materially reduce confidence. Missing evidence
+    # reduces confidence as well, rather than producing a misleading 75/100.
+    verification_score -= len(conflicts) * 15.0
+    verification_score = round(max(0.0, min(100.0, verification_score)), 2)
+
+    hard_conflict = bool(conflicts)
+    complete_core_checks = passed == len(CHECK_NAMES) and not incomplete_checks and not hard_conflict
+    evidence_complete = has_commercial and has_payment
+    verified = complete_core_checks and evidence_complete
+    status = "verified" if verified else "review_required"
 
     failed_checks = [name for name, value in checks.items() if not value]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
+    if not has_commercial:
+        failed_checks.append("missing_commercial_evidence")
+    if not has_payment:
+        failed_checks.append("missing_payment_evidence")
+
     return {
         "status": status,
         "checks": checks,
@@ -61,17 +90,19 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]]) -> dict:
         "conflicts": conflicts,
         "incomplete_checks": incomplete_checks,
         "passed_checks": passed,
-        "total_checks": total,
+        "total_checks": len(CHECK_NAMES),
         "verification_score": verification_score,
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
+        "commercial_evidence_present": has_commercial,
+        "payment_evidence_present": has_payment,
     }
 
 
 def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
-    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)})
+    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)}, [evidence])
 
 
 def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
     checks_by_evidence = {item.evidence_id: _checks_for_evidence(invoice, item) for item in evidence_items}
-    return _aggregate(checks_by_evidence)
+    return _aggregate(checks_by_evidence, evidence_items)
