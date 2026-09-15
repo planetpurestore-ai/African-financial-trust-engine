@@ -11,6 +11,7 @@ from app.bank_grade_api import router as bank_grade_router
 from app.bank_grade_controls import router as controls_router
 from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
+from app.payment_adapters import adapter_catalog
 
 init_production_db()
 app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.0", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
@@ -37,6 +38,10 @@ def health():
         return {"status": "ok", "service": "trust-engine", "version": "2.4.0", "database": "ok"}
     finally:
         db.close()
+
+@app.get("/v1/payment-adapters")
+def payment_adapters():
+    return {"count": len(adapter_catalog()), "adapters": adapter_catalog()}
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
