@@ -7,4 +7,4 @@ COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 EXPOSE 10000
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.production_entry:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.production_entry:app --host 0.0.0.0 --port ${PORT:-10000} --proxy-headers --forwarded-allow-ips='*'"]
