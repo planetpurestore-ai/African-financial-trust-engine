@@ -1,37 +1,51 @@
-# Production Assurance Baseline
+# Trust Engine — Production Assurance
 
-This checklist separates software-controlled production assurance from dependencies that require a bank, regulator, or external provider.
+This document separates software-controlled production assurance from dependencies that require a bank, regulator, auditor, hosting operator, or external provider.
 
-## Software-controlled controls
+## Implemented in the application
 
-- [x] Organization isolation
-- [x] API-key authentication
-- [x] Read/write authorization separation
-- [x] Idempotency support
-- [x] Audit hash-chain support
-- [x] Document ingestion and extraction
-- [x] Multi-evidence verification
-- [x] Risk decisioning
-- [x] Signed webhook support
-- [x] Trust graph
-- [x] Security event logging
-- [x] Request IDs and baseline security headers
-- [x] Automated production smoke/security tests added
-- [ ] Concurrency/load testing in a production-like environment
-- [ ] Backup restore drill
-- [ ] Disaster-recovery runbook and recovery objective validation
-- [ ] Centralized monitoring and alerting
-- [ ] Secret rotation procedure and production KMS/secret manager
-- [ ] Dependency/container vulnerability scanning
-- [ ] Independent penetration test
+- [x] PostgreSQL persistence with Alembic migrations
+- [x] Organization-scoped data access and foreign-key isolation
+- [x] API-key authentication with peppered hashes and one-time secret presentation
+- [x] Separate operational read/write scopes and distinct administrative scope
+- [x] Least-privilege default API-key policies; admin scope is not granted automatically
+- [x] API-key revocation and expiry policy support
+- [x] Request-size protection and validated request IDs
+- [x] Security response headers and HTTPS HSTS behavior behind a reverse proxy
+- [x] Idempotency keys and database uniqueness constraints
+- [x] Duplicate invoice detection and explicit risk decisions
+- [x] Multi-evidence verification for purchase orders, contracts, and payment records
+- [x] Evidence conflict/incomplete handling
+- [x] Tamper-evident audit hash chain with verification endpoint
+- [x] Organization-scoped trust entities and relationships
+- [x] Signed webhook verification and integration-event deduplication
+- [x] Document SHA-256 fingerprints and extraction provenance
+- [x] PDF extraction and OCR adapter boundary
+- [x] Database-backed health endpoint
+- [x] Non-root production container execution
+- [x] Container healthcheck
+- [x] Automated Python compilation and core assurance tests in GitHub Actions
+- [x] Operational PostgreSQL backup script
 
-## External dependencies
+## Required before real bank production
 
-- [ ] Authoritative bank/open-banking connectivity
-- [ ] Authoritative mobile-money connectivity
-- [ ] External business/KYC/registry sources
-- [ ] Production provider credentials and commercial agreements
-- [ ] Bank UAT/security/vendor approval
-- [ ] Data-processing/privacy/legal review
+These cannot honestly be marked complete merely by changing application source code:
 
-A successful verification score is a result of the configured evidence rules; it is not by itself proof that an external source is truthful. Authoritative integrations and bank controls are required for that assurance level.
+1. Run independent penetration testing and remediate findings.
+2. Run production-sized load, concurrency, soak, and failure-injection tests.
+3. Establish automated encrypted database backups and complete a documented restore drill.
+4. Configure centralized monitoring, alerting, log retention, and incident-response/on-call procedures.
+5. Use managed production secret/KMS facilities, rotate bootstrap/API/integration secrets, and document privileged access.
+6. Move the current development/free hosting/database configuration to production SLA capacity.
+7. Establish and test disaster recovery with explicit RPO/RTO targets.
+8. Complete privacy, retention, residency, vendor-risk, legal, and compliance reviews.
+9. Integrate and contract with authoritative banking/open-banking, mobile-money, and registry providers where required.
+10. Complete customer UAT and bank-specific risk-policy calibration.
+
+## Verification boundary
+
+A 100% verification score means all configured rule checks passed against the supplied evidence. It does not by itself prove that the evidence is authentic or that an external institution has independently attested to the transaction. Authoritative-source integrations and independent controls strengthen that assurance.
+
+## Release gate
+
+Do not label the system bank-production-ready solely because CI is green. The release gate is: application controls implemented + CI green + independent security assessment passed + production infrastructure/DR controls tested + customer UAT passed + required external data-source integrations and contractual approvals completed.
