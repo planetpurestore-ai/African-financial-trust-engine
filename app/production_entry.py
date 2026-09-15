@@ -13,10 +13,7 @@ from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
 from app.payment_adapters import adapter_catalog
 
-# Database migrations are run once by the deployment start command. Do not run
-# Alembic again while importing the ASGI application: doing so can cause a
-# second SQLite migration to contend with the first process during deployment.
-app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.0", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
+app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.1", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key"])
@@ -30,14 +27,14 @@ app.include_router(controls_router)
 
 @app.get("/", include_in_schema=False)
 def root_dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_v3.html"))
+    return FileResponse(Path(__file__).with_name("dashboard_v2.html"), media_type="text/html")
 
 @app.get("/health")
 def health():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "service": "trust-engine", "version": "2.4.0", "database": "ok"}
+        return {"status": "ok", "service": "trust-engine", "version": "2.4.1", "database": "ok"}
     finally:
         db.close()
 
@@ -47,8 +44,8 @@ def payment_adapters():
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_v3.html"))
+    return FileResponse(Path(__file__).with_name("dashboard_v2.html"), media_type="text/html")
 
 @app.get("/legacy-dashboard", include_in_schema=False)
 def legacy_dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_v2.html"))
+    return FileResponse(Path(__file__).with_name("dashboard_v2.html"), media_type="text/html")
