@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
@@ -87,4 +88,11 @@ class IntegrationEvent(Base):
 
 
 def init_production_db():
-    Base.metadata.create_all(engine)
+    """Apply versioned database migrations before the API starts serving traffic."""
+    from alembic import command
+    from alembic.config import Config
+
+    config_path = Path(__file__).resolve().parent.parent / "alembic.ini"
+    config = Config(str(config_path))
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
