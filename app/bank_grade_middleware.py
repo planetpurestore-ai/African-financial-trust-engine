@@ -20,6 +20,18 @@ def _required_scope(path, method):
     if path.startswith("/v1/integrations"): return "integrations:read" if method=="GET" else "integrations:write"
     return None
 
+def _expiry(value):
+    if value is None: return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed=datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
 async def bank_grade_security(request: Request, call_next):
     path=request.url.path
     if not path.startswith("/v1/") or path.startswith("/v1/organizations") or path.endswith("/webhook"):
@@ -37,7 +49,8 @@ async def bank_grade_security(request: Request, call_next):
             db.execute(text("INSERT INTO api_key_policies(key_hash,organization_id,scopes) VALUES (:h,:o,:s)"),{"h":_hash_key(api_key),"o":row["organization_id"],"s":scopes}); db.commit()
             policy={"expires_at":None,"scopes":scopes,"revoked":0}
         if not row["active"] or policy["revoked"]: return JSONResponse({"detail":"API key has been revoked"},status_code=401)
-        if policy["expires_at"] is not None and policy["expires_at"] <= datetime.now(timezone.utc): return JSONResponse({"detail":"API key has expired"},status_code=401)
+        expires_at=_expiry(policy["expires_at"])
+        if expires_at is not None and expires_at <= datetime.now(timezone.utc): return JSONResponse({"detail":"API key has expired"},status_code=401)
         scope=_required_scope(path,request.method); scopes=set(filter(None,(policy["scopes"] or "").split(",")))
         if scope and scope not in scopes: return JSONResponse({"detail":"API key does not have the required scope"},status_code=403)
         db.execute(text("UPDATE api_key_policies SET last_used_at=CURRENT_TIMESTAMP WHERE key_hash=:h"),{"h":_hash_key(api_key)}); db.commit()
