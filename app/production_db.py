@@ -8,9 +8,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is required for the production engine")
 
-# Render's PostgreSQL URL is commonly supplied as postgresql://... .
-# This image installs psycopg (v3), so explicitly select that driver rather
-# than SQLAlchemy's legacy psycopg2 driver.
 def _database_url(url: str) -> str:
     if url.startswith("postgresql://"):
         return "postgresql+psycopg://" + url[len("postgresql://"):]
@@ -19,7 +16,14 @@ def _database_url(url: str) -> str:
     return url
 
 DATABASE_URL = _database_url(DATABASE_URL)
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),
+    connect_args={"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10"))},
+)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 class Base(DeclarativeBase):
@@ -99,10 +103,8 @@ class IntegrationEvent(Base):
 
 
 def init_production_db():
-    """Apply versioned database migrations before the API starts serving traffic."""
     from alembic import command
     from alembic.config import Config
-
     config_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     config = Config(str(config_path))
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
