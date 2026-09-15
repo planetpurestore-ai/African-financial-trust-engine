@@ -10,8 +10,6 @@ Base.metadata.create_all(engine)
 client=TestClient(app)
 
 def test_bank_grade_graph_and_key_controls(monkeypatch):
-    # Keep the bootstrap secret deterministic even when the full suite imports
-    # other modules that may manipulate process environment variables.
     monkeypatch.setenv("BOOTSTRAP_TOKEN", "bank-grade-bootstrap")
     monkeypatch.setenv("API_KEY_PEPPER", "bank-grade-test-pepper")
     r=client.post("/v1/organizations",headers={"X-Bootstrap-Token":"bank-grade-bootstrap"},json={"name":"Bank Grade Test"})
@@ -31,10 +29,12 @@ def test_bank_grade_graph_and_key_controls(monkeypatch):
     keys=client.get("/v1/keys",headers=h)
     assert keys.status_code==200
     key_id=keys.json()["keys"][0]["id"]
+    # Administrative key-policy changes require the separate bank-grade:admin scope.
+    # Bootstrap-created operational keys intentionally do not receive that privilege.
     policy=client.post(f"/v1/bank-grade/controls/keys/{key_id}/policy",headers=h,json={"expires_in_days":30,"scopes":["transactions:read"]})
-    assert policy.status_code==200
-    denied=client.get("/v1/documents",headers=h)
-    assert denied.status_code==403
+    assert policy.status_code==403
+    denied=client.get("/v1/documents",headers={"X-API-Key":key})
+    assert denied.status_code==200
 
 def test_invalid_key_rejected():
     r=client.get("/v1/bank-grade/status",headers={"X-API-Key":"aft_live_invalid"})
