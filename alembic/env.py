@@ -9,8 +9,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 def database_url():
-    # Keep Alembic on the same database URL as the application. When no
-    # managed database is attached, production_db.py uses local SQLite.
+    # Keep Alembic on the same database URL as the application.
     url = os.environ.get("DATABASE_URL", "sqlite:///./trust_engine.db")
     if url.startswith("postgres://"):
         url = "postgresql+psycopg://" + url[len("postgres://"):]
@@ -19,7 +18,10 @@ def database_url():
     return url
 
 url = database_url()
-config.set_main_option("sqlalchemy.url", url)
+# Alembic's Config uses ConfigParser interpolation. PostgreSQL passwords can
+# legitimately contain '%' characters, so escape them before storing the URL
+# in the Alembic config. The actual SQLAlchemy URL remains unchanged.
+config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 def run_migrations_offline():
