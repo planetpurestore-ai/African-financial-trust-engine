@@ -1,10 +1,11 @@
 import os
-import secrets
+import re
 import uuid
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(12 * 1024 * 1024)))
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 async def request_size_guard(request: Request, call_next):
     content_length = request.headers.get("content-length")
@@ -15,7 +16,9 @@ async def request_size_guard(request: Request, call_next):
         except ValueError:
             return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length header"})
 
-    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    supplied_request_id = request.headers.get("X-Request-ID")
+    request_id = supplied_request_id if supplied_request_id and _REQUEST_ID.fullmatch(supplied_request_id) else uuid.uuid4().hex
+    request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
