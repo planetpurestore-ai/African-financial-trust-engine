@@ -94,7 +94,15 @@ def upload_document(file: UploadFile = File(...), organization: Organization = D
     digest = sha256_bytes(data)
     existing = db.scalar(select(Document).where(Document.organization_id == organization.id, Document.sha256 == digest))
     if existing:
-        return {"document_id": existing.id, "duplicate": True, "sha256": digest, "extraction": json.loads(existing.extraction_json)}
+        refreshed = extract_fields(existing.text or "")
+        old = json.loads(existing.extraction_json or "{}")
+        if old.get("method"):
+            refreshed["method"] = old["method"]
+        if old.get("ocr_provider"):
+            refreshed["ocr_provider"] = old["ocr_provider"]
+        existing.extraction_json = json.dumps(refreshed, sort_keys=True)
+        db.commit()
+        return {"document_id": existing.id, "duplicate": True, "refreshed": True, "sha256": digest, "extraction": refreshed}
     content_type = file.content_type or "application/octet-stream"
     if content_type == "application/pdf" or (file.filename or "").lower().endswith(".pdf"):
         try:
