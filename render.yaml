@@ -15,11 +15,3 @@ services:
         generateValue: true
       - key: BOOTSTRAP_TOKEN
         generateValue: true
-
-databases:
-  - name: trust-engine-db
-    plan: free
-    region: frankfurt
-    databaseName: trust_engine
-    user: trust_engine
-    postgresMajorVersion: "18"
