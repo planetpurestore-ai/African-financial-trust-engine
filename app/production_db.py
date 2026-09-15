@@ -8,6 +8,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is required for the production engine")
 
+# Render's PostgreSQL URL is commonly supplied as postgresql://... .
+# This image installs psycopg (v3), so explicitly select that driver rather
+# than SQLAlchemy's legacy psycopg2 driver.
+def _database_url(url: str) -> str:
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    return url
+
+DATABASE_URL = _database_url(DATABASE_URL)
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -79,7 +90,7 @@ class IntegrationEvent(Base):
     __tablename__ = "integration_events"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
-    provider: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(100), nullable=False)
     event_key: Mapped[str] = mapped_column(String(255), nullable=False)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     normalized_json: Mapped[str] = mapped_column(Text, nullable=False)
