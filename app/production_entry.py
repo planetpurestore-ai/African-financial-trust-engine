@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import text
-from app.production_db import init_production_db, SessionLocal
+from app.production_db import SessionLocal
 from app.production_api import router
 from app.api_docs import router as system_router
 from app.setup_api import router as setup_router
@@ -13,7 +13,9 @@ from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
 from app.payment_adapters import adapter_catalog
 
-init_production_db()
+# Database migrations are run once by the deployment start command. Do not run
+# Alembic again while importing the ASGI application: doing so can cause a
+# second SQLite migration to contend with the first process during deployment.
 app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.0", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
 if origins:
