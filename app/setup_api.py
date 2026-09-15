@@ -62,11 +62,11 @@ def initial_setup(token: str = Query(..., min_length=10)):
 
 @router.get("/recover")
 def recover_api_key(token: str = Query(..., min_length=20)):
-    """Issue a fresh API key, bootstrapping the primary organization if needed.
+    """Issue a fresh API key without invalidating existing keys.
 
-    Access requires a short-lived recovery token supplied only through Render.
-    All previously active keys for the organization are revoked before the new
-    key is created, so the endpoint cannot create an accumulating set of keys.
+    Recovery is intentionally additive: creating a recovery key must never
+    revoke the user's existing production key. The recovery token itself is
+    short-lived and is supplied only through Render environment variables.
     """
     _check_token(token, "RECOVERY_TOKEN", "RECOVERY_EXPIRES_AT")
 
@@ -78,12 +78,6 @@ def recover_api_key(token: str = Query(..., min_length=20)):
             db.add(org)
             db.flush()
 
-        active_keys = db.scalars(
-            select(ApiKey).where(ApiKey.organization_id == org.id, ApiKey.active == 1)
-        ).all()
-        for key in active_keys:
-            key.active = 0
-
         raw_key = "aft_live_" + secrets.token_urlsafe(32)
         db.add(ApiKey(organization_id=org.id, key_hash=_hash_key(raw_key), label="recovery"))
         db.commit()
@@ -92,7 +86,7 @@ def recover_api_key(token: str = Query(..., min_length=20)):
             "organization_id": org.id,
             "organization_name": org.name,
             "api_key": raw_key,
-            "warning": "This recovery token expires automatically. Save this API key now; it is shown only once."
+            "warning": "This recovery token expires automatically. Save this API key now; it is shown only once. Existing API keys remain active."
         }
     finally:
         db.close()
