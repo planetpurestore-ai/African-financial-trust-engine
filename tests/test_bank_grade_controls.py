@@ -9,9 +9,13 @@ Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
 client=TestClient(app)
 
-def test_bank_grade_graph_and_key_controls():
+def test_bank_grade_graph_and_key_controls(monkeypatch):
+    # Keep the bootstrap secret deterministic even when the full suite imports
+    # other modules that may manipulate process environment variables.
+    monkeypatch.setenv("BOOTSTRAP_TOKEN", "bank-grade-bootstrap")
+    monkeypatch.setenv("API_KEY_PEPPER", "bank-grade-test-pepper")
     r=client.post("/v1/organizations",headers={"X-Bootstrap-Token":"bank-grade-bootstrap"},json={"name":"Bank Grade Test"})
-    assert r.status_code==201
+    assert r.status_code==201, r.text
     key=r.json()["api_key"]
     h={"X-API-Key":key}
     status=client.get("/v1/bank-grade/status",headers=h)
