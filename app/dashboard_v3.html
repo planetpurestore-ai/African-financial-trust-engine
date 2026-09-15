@@ -5,17 +5,25 @@ frame.addEventListener('load',()=>{
   const d=frame.contentDocument,w=frame.contentWindow;
   const verify=d.getElementById('verify');
   if(!verify)return;
-  const box=d.createElement('div');box.className='evidence-card';box.style.borderColor='#c7a34b';box.innerHTML='<h3>Invoice being verified</h3><div class="grid"><div><label>Invoice Number</label><input id="editable_invoice_number" placeholder="Enter a unique invoice number"></div></div><p class="sub">You can edit this number before verification. Use a new unique number for each test.</p>';
+  const box=d.createElement('div');box.className='evidence-card';box.style.borderColor='#c7a34b';box.innerHTML='<h3>Review extracted invoice data</h3><p class="sub">Check and correct the extracted values before verification. The final values are what the engine verifies.</p><div class="grid"><div><label>Invoice Number</label><input id="edit_invoice_number"></div><div><label>Supplier</label><input id="edit_supplier"></div><div><label>Buyer</label><input id="edit_buyer"></div><div><label>Amount</label><input id="edit_amount" type="number" step="0.01"></div><div><label>Currency</label><input id="edit_currency"></div><div><label>Issue Date</label><input id="edit_issue_date" type="date"></div><div><label>Due Date</label><input id="edit_due_date" type="date"></div></div><p class="sub">Corrections here update the verification payload. The original uploaded document remains stored separately.</p>';
   verify.insertBefore(box,verify.children[2]);
-  const input=d.getElementById('editable_invoice_number');
+  const ids=['invoice_number','supplier','buyer','amount','currency','issue_date','due_date'];
+  const inputs={invoice_number:d.getElementById('edit_invoice_number'),supplier:d.getElementById('edit_supplier'),buyer:d.getElementById('edit_buyer'),amount:d.getElementById('edit_amount'),currency:d.getElementById('edit_currency'),issue_date:d.getElementById('edit_issue_date'),due_date:d.getElementById('edit_due_date')};
+  function setFromExtraction(){
+    const fields=d.getElementById('fields');
+    if(!fields)return;
+    const vals=[...fields.querySelectorAll('.field')].map(x=>x.innerText.split('\n').slice(1).join('\n').trim());
+    if(vals.length>=7){ids.forEach((id,i)=>{if(vals[i]&&vals[i]!=='—')inputs[id].value=vals[i];});}
+  }
+  setFromExtraction();
+  const observer=new MutationObserver(setFromExtraction);const fields=d.getElementById('fields');if(fields)observer.observe(fields,{childList:true,subtree:true});
   const originalFetch=w.fetch.bind(w);
   w.fetch=async function(inputUrl,opts){
     const url=typeof inputUrl==='string'?inputUrl:(inputUrl&&inputUrl.url)||'';
-    if(url.endsWith('/v1/transactions')&&opts&&opts.body&&input.value.trim()){
-      try{const body=JSON.parse(opts.body);if(body.invoice){body.invoice.invoice_number=input.value.trim();opts={...opts,body:JSON.stringify(body)};}}catch(e){}
+    if(url.endsWith('/v1/transactions')&&opts&&opts.body){
+      try{const body=JSON.parse(opts.body);if(body.invoice){body.invoice={...body.invoice,invoice_number:inputs.invoice_number.value.trim(),supplier_name:inputs.supplier.value.trim(),buyer_name:inputs.buyer.value.trim(),amount:inputs.amount.value?Number(inputs.amount.value):body.invoice.amount,currency:inputs.currency.value.trim(),issue_date:inputs.issue_date.value,due_date:inputs.due_date.value};opts={...opts,body:JSON.stringify(body)};}}catch(e){}
     }
     return originalFetch(inputUrl,opts);
   };
-  const msg=d.createElement('p');msg.className='sub';msg.textContent='';box.appendChild(msg);
 });
 </script></body></html>
