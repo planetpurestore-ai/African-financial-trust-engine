@@ -26,7 +26,7 @@ def test_dashboard_routes_return_html():
     assert root.status_code == 200
     assert dashboard.status_code == 200
     assert "Trust Engine" in root.text
-    assert "Verify a transaction" in dashboard.text
+    assert "Build the evidence package" in dashboard.text
     assert root.headers["content-type"].startswith("text/html")
 
 
