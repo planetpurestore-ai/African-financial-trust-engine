@@ -8,6 +8,7 @@ from app.production_api import router
 from app.api_docs import router as system_router
 from app.setup_api import router as setup_router
 from app.bank_grade_api import router as bank_grade_router
+from app.bank_grade_controls import router as controls_router
 from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
 
@@ -22,6 +23,7 @@ app.include_router(system_router)
 app.include_router(router)
 app.include_router(setup_router)
 app.include_router(bank_grade_router)
+app.include_router(controls_router)
 
 @app.get("/", include_in_schema=False)
 def root_dashboard():
