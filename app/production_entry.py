@@ -27,7 +27,7 @@ app.include_router(controls_router)
 
 @app.get("/", include_in_schema=False)
 def root_dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard.html"))
+    return FileResponse(Path(__file__).with_name("dashboard_v2.html"))
 
 @app.get("/health")
 def health():
@@ -40,4 +40,4 @@ def health():
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard.html"))
+    return FileResponse(Path(__file__).with_name("dashboard_v2.html"))
