@@ -4,9 +4,11 @@ from pathlib import Path
 from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is required for the production engine")
+# Production deployments should provide DATABASE_URL. For a standalone browser
+# deployment with no managed database attached yet, use a local SQLite database
+# so the application can boot and be exercised end-to-end. This fallback is not
+# intended as the final production persistence layer.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trust_engine.db")
 
 def _database_url(url: str) -> str:
     if url.startswith("postgresql://"):
