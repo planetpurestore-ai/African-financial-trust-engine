@@ -32,3 +32,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: python -m pytest -q
+
+      - name: Verify Alembic migration graph
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: alembic heads && alembic history -n 5
