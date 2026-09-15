@@ -9,7 +9,9 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 def database_url():
-    url = os.environ.get("DATABASE_URL", "")
+    # Keep Alembic on the same database URL as the application. When no
+    # managed database is attached, production_db.py uses local SQLite.
+    url = os.environ.get("DATABASE_URL", "sqlite:///./trust_engine.db")
     if url.startswith("postgres://"):
         url = "postgresql+psycopg://" + url[len("postgres://"):]
     elif url.startswith("postgresql://"):
