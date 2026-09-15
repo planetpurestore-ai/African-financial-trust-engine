@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trust Engine — Operations Console</title><style>html,body{margin:0;height:100%;background:#f7f5ef;font-family:system-ui,-apple-system,Segoe UI,sans-serif}iframe{display:block;width:100%;height:100%;border:0}</style></head><body><iframe id="engine" src="/legacy-dashboard" title="Trust Engine"></iframe><script>
+const frame=document.getElementById('engine');
+frame.addEventListener('load',()=>{
+  const d=frame.contentDocument,w=frame.contentWindow;
+  const verify=d.getElementById('verify');
+  if(!verify)return;
+  const box=d.createElement('div');box.className='evidence-card';box.style.borderColor='#c7a34b';box.innerHTML='<h3>Invoice being verified</h3><div class="grid"><div><label>Invoice Number</label><input id="editable_invoice_number" placeholder="Enter a unique invoice number"></div></div><p class="sub">You can edit this number before verification. Use a new unique number for each test.</p>';
+  verify.insertBefore(box,verify.children[2]);
+  const input=d.getElementById('editable_invoice_number');
+  const originalFetch=w.fetch.bind(w);
+  w.fetch=async function(inputUrl,opts){
+    const url=typeof inputUrl==='string'?inputUrl:(inputUrl&&inputUrl.url)||'';
+    if(url.endsWith('/v1/transactions')&&opts&&opts.body&&input.value.trim()){
+      try{const body=JSON.parse(opts.body);if(body.invoice){body.invoice.invoice_number=input.value.trim();opts={...opts,body:JSON.stringify(body)};}}catch(e){}
+    }
+    return originalFetch(inputUrl,opts);
+  };
+  const msg=d.createElement('p');msg.className='sub';msg.textContent='';box.appendChild(msg);
+});
+</script></body></html>
