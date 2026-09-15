@@ -1,0 +1,17 @@
+name: Verify browser service
+
+on:
+  push:
+    branches: [verify-browser-live]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check public health endpoint
+        run: |
+          set -e
+          curl --fail --show-error --silent --location --max-time 30 \
+            https://african-financial-trust-engine-browser2.onrender.com/health
+          echo
+          echo "PUBLIC_HTTP_OK"
