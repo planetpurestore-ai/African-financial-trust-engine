@@ -16,14 +16,18 @@ def _database_url(url: str) -> str:
     return url
 
 DATABASE_URL = _database_url(DATABASE_URL)
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
-    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),
-    connect_args={"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10"))},
-)
+
+_engine_kwargs = {}
+if DATABASE_URL.startswith("postgresql+psycopg://"):
+    _engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 1800,
+        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "5")),
+        "connect_args": {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10"))},
+    })
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 class Base(DeclarativeBase):
@@ -100,7 +104,6 @@ class IntegrationEvent(Base):
     normalized_json: Mapped[str] = mapped_column(Text, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "provider", "event_key", name="uq_integration_event"),)
-
 
 def init_production_db():
     from alembic import command
