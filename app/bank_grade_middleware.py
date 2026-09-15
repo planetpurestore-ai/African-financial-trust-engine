@@ -43,10 +43,12 @@ async def bank_grade_security(request: Request, call_next):
     try:
         row=db.execute(text("SELECT id,organization_id,active FROM api_keys WHERE key_hash=:h"),{"h":_hash_key(api_key)}).mappings().first()
         if not row: return JSONResponse({"detail":"Invalid API key"},status_code=401)
-        db.execute(text("CREATE TABLE IF NOT EXISTS api_key_policies (key_hash VARCHAR(128) PRIMARY KEY, organization_id INTEGER NOT NULL, expires_at TIMESTAMPTZ, scopes TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, last_used_at TIMESTAMPTZ)"))
+        # Policy tables are created by Alembic migrations, never lazily during a request.
         policy=db.execute(text("SELECT expires_at,scopes,revoked FROM api_key_policies WHERE key_hash=:h"),{"h":_hash_key(api_key)}).mappings().first()
         if not policy:
-            scopes="transactions:read,transactions:write,documents:read,documents:write,integrations:read,integrations:write,audits:read,bank-grade:read,bank-grade:write,bank-grade:admin"
+            # New keys receive only operational read/write scopes. Administrative control
+            # scope must be provisioned explicitly through an out-of-band operator process.
+            scopes="transactions:read,transactions:write,documents:read,documents:write,integrations:read,integrations:write,audits:read,bank-grade:read,bank-grade:write"
             db.execute(text("INSERT INTO api_key_policies(key_hash,organization_id,scopes) VALUES (:h,:o,:s)"),{"h":_hash_key(api_key),"o":row["organization_id"],"s":scopes}); db.commit()
             policy={"expires_at":None,"scopes":scopes,"revoked":0}
         if not row["active"] or policy["revoked"]: return JSONResponse({"detail":"API key has been revoked"},status_code=401)
