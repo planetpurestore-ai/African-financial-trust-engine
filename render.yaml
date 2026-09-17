@@ -1,3 +1,10 @@
+databases:
+  - name: trust-engine-db
+    plan: free
+    region: frankfurt
+    databaseName: trust_engine_db
+    user: trust_engine_db_user
+
 services:
   - type: web
     name: african-financial-trust-engine-browser2
