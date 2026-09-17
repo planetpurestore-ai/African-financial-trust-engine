@@ -17,12 +17,25 @@ def bootstrap() -> None:
         return
     db = SessionLocal()
     try:
-        if db.query(Organization).first():
-            return
-        org = Organization(name="African Financial Trust")
-        db.add(org)
-        db.flush()
-        db.add(ApiKey(organization_id=org.id, key_hash=hash_key(raw_key), label="initial"))
+        org = db.query(Organization).order_by(Organization.id).first()
+        if org is None:
+            org = Organization(name="African Financial Trust")
+            db.add(org)
+            db.flush()
+
+        # INITIAL_API_KEY is an explicit administrative provisioning input.
+        # Keep old credentials inactive and install the supplied key using the
+        # current API_KEY_PEPPER. This also repairs deployments where the
+        # database survived but the original bootstrap credential did not.
+        db.query(ApiKey).filter(ApiKey.organization_id == org.id).update(
+            {ApiKey.active: 0}, synchronize_session=False
+        )
+        db.add(ApiKey(
+            organization_id=org.id,
+            key_hash=hash_key(raw_key),
+            label="primary",
+            active=1,
+        ))
         db.commit()
     finally:
         db.close()
