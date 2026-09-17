@@ -25,9 +25,12 @@ app.include_router(setup_router)
 app.include_router(bank_grade_router)
 app.include_router(controls_router)
 
+DASHBOARD = Path(__file__).with_name("dashboard_exact.html")
+LEGACY_DASHBOARD = Path(__file__).with_name("dashboard_v2.html")
+
 @app.get("/", include_in_schema=False)
 def root_dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_institutional.html"), media_type="text/html")
+    return FileResponse(DASHBOARD, media_type="text/html")
 
 @app.get("/health")
 def health():
@@ -44,8 +47,8 @@ def payment_adapters():
 
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_institutional.html"), media_type="text/html")
+    return FileResponse(DASHBOARD, media_type="text/html")
 
 @app.get("/legacy-dashboard", include_in_schema=False)
 def legacy_dashboard():
-    return FileResponse(Path(__file__).with_name("dashboard_v2.html"), media_type="text/html")
+    return FileResponse(LEGACY_DASHBOARD, media_type="text/html")
