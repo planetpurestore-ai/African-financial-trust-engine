@@ -1,0 +1,17 @@
+/* Pixel-match pass: Design 1 Premium Dark */
+:root{--sidebar:238px;--top:72px;--bg:#070f1d;--line:#1a2940;--panel:#0d1727;--panel2:#111d30;--text:#f7f9fc;--muted:#8795a8;--gold:#d9b45d;--gold2:#f1ce79;--green:#38d39f;--teal:#35c5d8;--red:#ff6672;--amber:#f2b64a}
+html,body{min-width:1180px;background:#070f1d;font-size:14px}
+.app{background:linear-gradient(180deg,#070f1d 0%,#091323 55%,#070f1d 100%)}
+.topbar{height:72px;padding:0 28px;background:#0a111e;border-bottom:1px solid #1c2a3d}
+.brand{width:238px;gap:12px}.brandmark{width:36px;height:36px;border-radius:8px}.brandmark svg{width:25px;height:25px}.brandname{font-size:11px;letter-spacing:.4px}.product{font-size:13px;padding-left:18px;color:#d1d9e3}
+.topright{gap:26px}.online{font-size:11px}.dot{width:7px;height:7px}.updated{font-size:10px}.profile{gap:10px;padding-left:20px}.avatar{width:34px;height:34px;font-size:10px}.ptext b{font-size:11px}.ptext small{font-size:9px}
+.shell{grid-template-columns:238px minmax(0,1fr);min-height:calc(100vh - 72px)}
+.sidebar{padding:24px 14px;background:#080f1b;border-right:1px solid #1b293c}.nav{height:40px;gap:12px;padding:0 13px;margin:4px 0;border-radius:7px;font-size:11px}.ico{width:15px;font-size:12px}.nav.active{background:linear-gradient(90deg,#173451,#10283f);border-color:#234964;box-shadow:inset 3px 0 0 var(--gold)}
+.sidebottom{left:14px;bottom:18px;width:208px;padding-top:13px;font-size:8px}.sidebottom strong{font-size:9px}
+.main{padding:32px 36px 56px;max-width:none}.hero{margin-bottom:22px}.eyebrow{font-size:9px;letter-spacing:1.4px;margin-bottom:7px}.hero h1{font-size:27px;letter-spacing:-.8px}.hero p{font-size:11px;margin-top:7px}.status{padding:7px 11px;font-size:9px}
+.metrics{gap:14px;margin-bottom:16px}.metric{height:96px;border-radius:9px;padding:15px 16px;background:linear-gradient(145deg,#101f33,#0c192b);border-color:#203650}.mlabel{font-size:10px}.mrow{margin-top:6px}.mvalue{font-size:29px}.delta{font-size:9px;margin-bottom:4px}
+.content{grid-template-columns:minmax(0,1.55fr) minmax(320px,.78fr);gap:16px}.card{border-radius:9px;border-color:#203650;margin-bottom:16px;box-shadow:0 18px 42px rgba(0,0,0,.2)}.chead{height:50px;padding:0 17px}.chead h2{font-size:12px}.chead span{font-size:9px}.cbody{padding:17px}.outcome{grid-template-columns:205px 1fr;gap:24px;min-height:185px}.donut{width:150px;height:150px}.donut:before{width:112px;height:112px}.donuttext strong{font-size:27px}.donuttext small{font-size:9px}.legend{gap:15px}.legendrow{grid-template-columns:9px 1fr auto;gap:9px;font-size:11px}.legenddot{width:7px;height:7px}.legendrow b{font-size:11px}.legendrow small{font-size:9px}
+.activity{min-height:185px}.activityrow{gap:12px;padding:13px 0}.activityicon{width:29px;height:29px;font-size:10px}.activitytext b{font-size:10px}.activitytext small{font-size:8px;margin-top:3px}.time{font-size:8px}
+.table th{font-size:8px;padding:11px 13px}.table td{font-size:10px;padding:12px 13px}.pill{padding:4px 8px;font-size:8px}.pill:before{width:5px;height:5px}
+.sidecard .cbody{padding:15px}.healthrow{font-size:10px;padding:7px 0}.healthrow b{font-size:9px}
+@media(max-width:1180px){html,body{min-width:1180px}.main{padding-right:28px;padding-left:28px}}
