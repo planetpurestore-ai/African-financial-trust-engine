@@ -1,4 +1,5 @@
 import os
+import uuid
 
 os.environ["DATABASE_URL"] = "sqlite:///./test_production.db"
 os.environ["API_KEY_PEPPER"] = "test-pepper"
@@ -15,17 +16,20 @@ client = TestClient(app)
 
 
 def test_production_transaction_round_trip():
+    suffix = uuid.uuid4().hex[:12]
+    invoice_number = f"INV-{suffix}"
+    idempotency_key = f"case-{suffix}"
     org_response = client.post(
         "/v1/organizations",
         headers={"X-Bootstrap-Token": "test-bootstrap"},
-        json={"name": "Test Institution"},
+        json={"name": f"Test Institution {suffix}"},
     )
     assert org_response.status_code == 201
     api_key = org_response.json()["api_key"]
 
     payload = {
         "invoice": {
-            "invoice_number": "INV-1001",
+            "invoice_number": invoice_number,
             "supplier_name": "Supplier Ltd",
             "buyer_name": "Buyer Ltd",
             "amount": "12500.00",
@@ -35,9 +39,9 @@ def test_production_transaction_round_trip():
         },
         "evidence": [
             {
-                "evidence_id": "PO-1001",
+                "evidence_id": f"PO-{suffix}",
                 "evidence_type": "purchase_order",
-                "reference_number": "PO-1001",
+                "reference_number": f"PO-{suffix}",
                 "supplier_name": "Supplier Ltd",
                 "buyer_name": "Buyer Ltd",
                 "amount": "12500.00",
@@ -46,9 +50,9 @@ def test_production_transaction_round_trip():
                 "description": "Purchase order",
             },
             {
-                "evidence_id": "PAY-1001",
+                "evidence_id": f"PAY-{suffix}",
                 "evidence_type": "payment_record",
-                "reference_number": "PAY-1001",
+                "reference_number": f"PAY-{suffix}",
                 "supplier_name": "Supplier Ltd",
                 "buyer_name": "Buyer Ltd",
                 "amount": "12500.00",
@@ -60,7 +64,7 @@ def test_production_transaction_round_trip():
     }
     response = client.post(
         "/v1/transactions",
-        headers={"X-API-Key": api_key, "Idempotency-Key": "case-1001"},
+        headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
         json=payload,
     )
     assert response.status_code == 201
@@ -71,7 +75,7 @@ def test_production_transaction_round_trip():
 
     repeat = client.post(
         "/v1/transactions",
-        headers={"X-API-Key": api_key, "Idempotency-Key": "case-1001"},
+        headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
         json=payload,
     )
     assert repeat.status_code == 200
