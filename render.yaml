@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: african-financial-trust-engine
+    name: african-financial-trust-engine-browser2
     runtime: docker
     plan: free
     region: frankfurt
