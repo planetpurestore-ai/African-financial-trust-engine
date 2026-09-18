@@ -175,7 +175,26 @@ def create_transaction(body: ProductionTransaction, response: Response, organiza
 
 def _transaction_response(tx: Transaction, db: Session):
     audit = db.scalar(select(AuditEvent).where(AuditEvent.transaction_id == tx.id).order_by(desc(AuditEvent.id)))
-    return {"transaction_id": tx.id, "invoice_number": tx.invoice_number, "status": tx.status, "audit_id": audit.id if audit else None, "audit_hash": audit.event_hash if audit else None, "verification": json.loads(audit.result_json) if audit else None, "created_at": tx.created_at.isoformat()}
+    try:
+        payload = json.loads(tx.payload or "{}")
+        invoice = payload.get("invoice") or {}
+    except (TypeError, json.JSONDecodeError):
+        invoice = {}
+    return {
+        "transaction_id": tx.id,
+        "invoice_number": tx.invoice_number,
+        "status": tx.status,
+        "supplier_name": invoice.get("supplier_name"),
+        "buyer_name": invoice.get("buyer_name"),
+        "amount": invoice.get("amount"),
+        "currency": invoice.get("currency"),
+        "issue_date": invoice.get("issue_date"),
+        "due_date": invoice.get("due_date"),
+        "audit_id": audit.id if audit else None,
+        "audit_hash": audit.event_hash if audit else None,
+        "verification": json.loads(audit.result_json) if audit else None,
+        "created_at": tx.created_at.isoformat()
+    }
 
 @router.get("/transactions/{transaction_id}")
 def get_transaction(transaction_id: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
