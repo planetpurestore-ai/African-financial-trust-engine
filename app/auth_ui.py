@@ -41,7 +41,7 @@ def _verify_password(password: str, stored: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-def _user_json(user, org):
+def _valid_email(email: str) -> bool:\n    parts = email.strip().lower().split("@")\n    return len(parts) == 2 and bool(parts[0]) and "." in parts[1] and not any(ch.isspace() for ch in email)\n\ndef _user_json(user, org):
     return {"id": user.id, "full_name": user.full_name, "email": user.email,
             "role": user.role, "organization_id": org.id, "organization_name": org.name}
 
@@ -77,12 +77,12 @@ def current_user(request: Request, db: Session = Depends(db_session)):
 
 class BootstrapBody(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
-    email: str = Field(pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+    email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=12, max_length=128)
     organization_name: str = Field(min_length=2, max_length=200)
 
 class LoginBody(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=1, max_length=128)
 
 @router.post("/v1/auth/bootstrap", status_code=201)
