@@ -176,3 +176,54 @@ def test_bootstrap_rejects_duplicate_email_case_insensitively(client):
         json={**payload, "email": "ADMIN@example.com", "organization_name": "Second Institution"},
     )
     assert duplicate.status_code == 409
+
+
+
+def test_authenticated_transaction_submission_and_audit_chain(client):
+    headers = {"X-Bootstrap-Token": "test-bootstrap-token-long-enough"}
+    first = client.post(
+        "/v1/auth/bootstrap",
+        headers=headers,
+        json={
+            "full_name": "First Admin",
+            "email": "first@example.com",
+            "password": "a-long-test-password-123",
+            "organization_name": "First Institution",
+        },
+    )
+    assert first.status_code == 201
+    payload = {
+        "invoice": {
+            "invoice_number": "INV-MVP-1001",
+            "supplier_name": "Kigali Coffee Cooperative",
+            "buyer_name": "Northstar Imports",
+            "amount": "1250.00",
+            "currency": "EUR",
+            "issue_date": "2026-10-01",
+            "due_date": "2026-11-01",
+        },
+        "evidence": [{
+            "evidence_id": "PO-MVP-1001",
+            "evidence_type": "purchase_order",
+            "reference_number": "PO-MVP-1001",
+            "supplier_name": "Kigali Coffee Cooperative",
+            "buyer_name": "Northstar Imports",
+            "amount": "1250.00",
+            "currency": "EUR",
+            "evidence_date": "2026-10-01",
+        }],
+    }
+    created = client.post("/v1/ui/transactions", json=payload, headers={"Idempotency-Key": "test-mvp-1001"})
+    assert created.status_code == 201
+    body = created.json()
+    assert body["invoice_number"] == "INV-MVP-1001"
+    assert body["status"] in {"verified", "review_required", "rejected"}
+    assert body["audit_id"] is not None
+    assert body["audit_hash"]
+    assert body["verification"] is not None
+    chain = client.get("/v1/ui/audits/verify-chain")
+    assert chain.status_code == 200
+    assert chain.json()["valid"] is True
+    dashboard = client.get("/v1/ui/dashboard").json()
+    assert dashboard["metrics"]["total"] == 1
+    assert dashboard["transactions"][0]["invoice_number"] == "INV-MVP-1001"
