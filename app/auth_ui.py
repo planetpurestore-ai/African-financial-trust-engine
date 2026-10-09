@@ -259,3 +259,24 @@ def ui_upload_document(file: UploadFile = File(...), ctx=Depends(current_user)):
     db.commit()
     return {"document_id": doc.id, "duplicate": False, "sha256": digest,
             "filename": file.filename, "extraction": extraction}
+
+
+@router.get("/v1/ui/audits/verify-chain")
+def ui_verify_chain(ctx=Depends(current_user)):
+    _, org, db = ctx
+    events = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org.id)
+                        .order_by(AuditEvent.id.asc())).all()
+    previous = "0" * 64
+    errors = []
+    for event in events:
+        try:
+            result = json.loads(event.result_json or "{}")
+            score = result.get("verification_score")
+        except (ValueError, TypeError):
+            score = None
+        canonical = str(previous) + "|" + str(event.transaction_id) + "|" + str(event.decision) + "|" + str(score) + "|" + str(event.result_json)
+        expected = hashlib.sha256(canonical.encode()).hexdigest()
+        if event.previous_hash != previous or event.event_hash != expected:
+            errors.append({"audit_id": event.id, "issue": "hash_chain_mismatch"})
+        previous = event.event_hash
+    return {"valid": not errors, "checked": len(events), "errors": errors}
