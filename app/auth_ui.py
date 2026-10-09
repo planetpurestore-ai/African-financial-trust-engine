@@ -11,7 +11,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
-from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document\nfrom app.document_engine import sha256_bytes, extract_pdf_text, extract_fields\nfrom app.integrations import image_ocr, OCRProviderError
+from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document
+from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
+from app.integrations import image_ocr, OCRProviderError
 from app.production_api import ProductionTransaction, create_transaction
 
 router = APIRouter(tags=["browser-auth"])
@@ -41,7 +43,11 @@ def _verify_password(password: str, stored: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-def _valid_email(email: str) -> bool:\n    parts = email.strip().lower().split("@")\n    return len(parts) == 2 and bool(parts[0]) and "." in parts[1] and not any(ch.isspace() for ch in email)\n\ndef _user_json(user, org):
+def _valid_email(email: str) -> bool:
+    parts = email.strip().lower().split("@")
+    return len(parts) == 2 and bool(parts[0]) and "." in parts[1] and not any(ch.isspace() for ch in email)
+
+def _user_json(user, org):
     return {"id": user.id, "full_name": user.full_name, "email": user.email,
             "role": user.role, "organization_id": org.id, "organization_name": org.name}
 
