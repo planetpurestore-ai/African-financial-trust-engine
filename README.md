@@ -106,7 +106,7 @@ GitHub Actions runs the same suite on pushes to `main`, pull requests targeting 
 
 This is a functional engineering MVP, not production financial infrastructure. The prototype is intentionally limited to structured evidence supplied by the caller. It does not yet connect to live bank, mobile-money, accounting, ERP, logistics or government data sources, and it does not make lending or credit decisions.
 
-Production work after the prototype includes authentication and authorization, encryption and secrets management, production database infrastructure, source integrations, richer verification and anomaly rules, observability, security testing, regulatory/compliance review, data-retention controls and institutional pilots.
+Production hardening still required includes account invitation and lifecycle management, password reset, MFA, login throttling, security and penetration testing, formal compliance review, data-retention controls, monitoring and alerting, tested backup/restore, and institutional pilots. The browser-authentication foundation is documented in `docs/BROWSER_AUTH.md`; it is not a claim of production certification.
 
 ## Vision
 
