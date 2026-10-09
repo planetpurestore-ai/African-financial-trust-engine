@@ -252,3 +252,37 @@ def test_authenticated_transaction_submission_and_audit_chain(client):
     assert client.get("/v1/ui/dashboard").json()["metrics"]["total"] == 0
     assert client.get("/v1/ui/transactions").json()["count"] == 0
     assert client.get("/v1/ui/transactions/" + body["transaction_id"]).status_code == 404
+
+
+
+def test_authenticated_document_upload_extracts_fields(client):
+    created = client.post(
+        "/v1/auth/bootstrap",
+        headers={"X-Bootstrap-Token": "test-bootstrap-token-long-enough"},
+        json={
+            "full_name": "Document Admin",
+            "email": "docs@example.com",
+            "password": "a-long-test-password-123",
+            "organization_name": "Document Institution",
+        },
+    )
+    assert created.status_code == 201
+    uploaded = client.post(
+        "/v1/ui/documents",
+        files={
+            "file": (
+                "invoice.txt",
+                "Invoice No: INV-DOC-100\nSupplier: Kigali Coffee Cooperative\n"
+                "Buyer: Northstar Imports\nCurrency: EUR\nTotal Due: 1250.00",
+                "text/plain",
+            )
+        },
+    )
+    assert uploaded.status_code == 201
+    body = uploaded.json()
+    assert body["extraction"]["invoice_number"] == "INV-DOC-100"
+    assert body["extraction"]["supplier_name"] == "Kigali Coffee Cooperative"
+    assert body["extraction"]["amount"] == 1250.0
+    listed = client.get("/v1/ui/documents")
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
