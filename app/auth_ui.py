@@ -87,6 +87,12 @@ class BootstrapBody(BaseModel):
     password: str = Field(min_length=12, max_length=128)
     organization_name: str = Field(min_length=2, max_length=200)
 
+class OrganizationBootstrapBody(BaseModel):
+    full_name: str = Field(min_length=2, max_length=160)
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=12, max_length=128)
+    organization_name: str = Field(min_length=2, max_length=200)
+
 class LoginBody(BaseModel):
     email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=1, max_length=128)
@@ -113,6 +119,33 @@ def bootstrap(body: BootstrapBody, request: Request, response: Response,
     db.commit()
     db.refresh(user)
     return _issue_session(user, org, db, request, response)
+
+@router.post("/v1/auth/organizations", status_code=201)
+def create_organization_account(
+    body: OrganizationBootstrapBody,
+    x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"),
+    db: Session = Depends(db_session),
+):
+    expected = os.getenv("BOOTSTRAP_TOKEN")
+    if not expected or not x_bootstrap_token or not hmac.compare_digest(x_bootstrap_token, expected):
+        raise HTTPException(403, "Organization provisioning is not authorized")
+    email = str(body.email).strip().lower()
+    if not _valid_email(email):
+        raise HTTPException(422, "Enter a valid email address")
+    if db.scalar(select(UserAccount.id).where(UserAccount.email_normalized == email)):
+        raise HTTPException(409, "An account with this email already exists")
+    org = Organization(name=body.organization_name.strip())
+    db.add(org)
+    db.flush()
+    user = UserAccount(organization_id=org.id, full_name=body.full_name.strip(),
+        email=email, email_normalized=email, password_hash=_hash_password(body.password),
+        role="admin", active=True)
+    db.add(user)
+    db.commit()
+    return {"organization": {"id": org.id, "name": org.name},
+            "admin": {"id": user.id, "full_name": user.full_name, "email": user.email, "role": user.role},
+            "next_step": "Sign in with the admin email and password."}
+
 
 @router.post("/v1/auth/login")
 def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(db_session)):
