@@ -60,6 +60,23 @@ async function showTransaction(id){
   const body=document.createElement("div");body.className="cbody";
   const fields=[["Decision",tx.status||tx.decision||"Not available"],["Supplier",inv.supplier_name],["Buyer",inv.buyer_name],["Amount",(inv.currency||"")+" "+(inv.amount??"—")],["Created",tx.created_at?new Date(tx.created_at).toLocaleString():"—"],["Audit reference",tx.audit_id||audit.audit_id||"—"],["Verification score",audit.score==null?"Not available":audit.score],["Audit hash",tx.audit_hash||audit.audit_hash||audit.event_hash||"Not available"]];
   body.innerHTML="<div class=\"grid\">"+fields.map(([k,v])=>"<div class=\"metric\"><div class=\"mlabel\">"+esc(k)+"</div><div class=\"mvalue\" style=\"font-size:16px;overflow-wrap:anywhere\">"+esc(v??"—")+"</div></div>").join("")+"</div>";
+  const verification=audit.verification||{};
+  if(verification.checks){
+   const checksCard=document.createElement("section");checksCard.style.marginTop="18px";
+   const checksTitle=document.createElement("h3");checksTitle.textContent="Verification checks";checksCard.append(checksTitle);
+   const checksGrid=document.createElement("div");checksGrid.className="grid";
+   Object.entries(verification.checks).forEach(([name,passed])=>{const item=document.createElement("div");item.className="metric";const label=document.createElement("div");label.className="mlabel";label.textContent=name.replaceAll("_"," ");const value=document.createElement("div");value.className="mvalue";value.style.fontSize="16px";value.textContent=passed?"PASS":"NOT PASSED";value.style.color=passed?"var(--green)":"var(--red)";item.append(label,value);checksGrid.append(item)});
+   checksCard.append(checksGrid);
+   if((verification.failed_checks||[]).length){const failed=document.createElement("p");failed.style.color="var(--red)";failed.textContent="Items requiring attention: "+verification.failed_checks.join(", ");checksCard.append(failed)}
+   body.append(checksCard);
+  }
+  if(Array.isArray(evidence)&&evidence.length){
+   const evidenceCard=document.createElement("section");evidenceCard.style.marginTop="18px";
+   const evidenceTitle=document.createElement("h3");evidenceTitle.textContent="Submitted evidence ("+evidence.length+")";evidenceCard.append(evidenceTitle);
+   const list=document.createElement("div");list.className="grid";
+   evidence.forEach((item,index)=>{const box=document.createElement("div");box.className="metric";const title=document.createElement("div");title.className="mlabel";title.textContent=(item.evidence_type||"Evidence").replaceAll("_"," ");const desc=document.createElement("div");desc.style.fontSize="12px";desc.style.marginTop="8px";desc.style.overflowWrap="anywhere";desc.textContent=[item.reference_number,item.supplier_name,item.buyer_name,item.amount!=null?(item.currency||"")+" "+item.amount:"",item.description].filter(Boolean).join(" · ")||("Evidence item "+(index+1));box.append(title,desc);list.append(box)});
+   evidenceCard.append(list);body.append(evidenceCard);
+  }
   const raw=document.createElement("details");raw.style.marginTop="16px";const summary=document.createElement("summary");summary.textContent="Technical record (JSON)";summary.style.cursor="pointer";const pre=document.createElement("pre");pre.className="result";pre.textContent=JSON.stringify(x,null,2);raw.append(summary,pre);body.append(raw);card.append(heading,body);
   $("txResult").before(card);
  }catch(e){$("txResult").textContent="Transaction detail could not be loaded: "+e.message}
