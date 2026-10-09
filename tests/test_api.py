@@ -35,9 +35,10 @@ def test_verify_endpoint_returns_explainable_result_and_audit_id():
         supplier_name=" supplier ltd ", buyer_name="BUYER LTD", currency="usd")})
     assert response.status_code == 200
     body = response.json()
-    assert body["decision"] == "verified"
+    assert body["decision"] == "review_required"
     assert isinstance(body["audit_id"], int)
-    assert body["verification"]["verification_score"] == 100.0
+    assert body["verification"]["verification_score"] == 80.0
+    assert "missing_payment_evidence" in body["verification"]["failed_checks"]
 
 
 def test_verify_endpoint_rejects_invalid_invoice_dates():
@@ -54,8 +55,8 @@ def test_invoice_and_evidence_can_be_stored_and_verified():
     assert client.get(f"/evidence/{evidence_id}").status_code == 200
     verification = client.post(f"/verify-stored/{invoice_number}/{evidence_id}")
     assert verification.status_code == 200
-    assert verification.json()["decision"] == "verified"
-    assert client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()["verification_score"] == 100.0
+    assert verification.json()["decision"] == "review_required"
+    assert client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()["verification_score"] == 80.0
 
 
 def test_end_to_end_transaction_submission_persists_and_verifies():
@@ -96,7 +97,7 @@ def test_mismatched_stored_evidence_requires_review():
     client.post("/evidence", json=_evidence(evidence_id, amount="9000.00"))
     body = client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()
     assert body["decision"] == "review_required"
-    assert body["verification_score"] == 75.0
+    assert body["verification_score"] == 65.0
     assert "amount_match" in body["failed_checks"]
 
 
@@ -125,7 +126,7 @@ def test_audit_history_records_verification():
     body = history.json()
     assert body["count"] >= 1
     assert body["audits"][0]["audit_id"] == audit_id
-    assert body["audits"][0]["decision"] == "verified"
+    assert body["audits"][0]["decision"] == "review_required"
 
 
 def test_audit_history_honors_limit():
@@ -149,7 +150,7 @@ def test_incomplete_single_evidence_requires_review():
         "evidence": _evidence("API-INCOMPLETE-PO", amount=None, currency=None, supplier_name=None, buyer_name=None),
     }).json()
     assert body["decision"] == "review_required"
-    assert body["verification"]["verification_score"] == 0.0
+    assert body["verification"]["verification_score"] == 20.0
     assert set(body["verification"]["incomplete_checks"]) == set(("supplier_match", "buyer_match", "amount_match", "currency_match"))
 
 
