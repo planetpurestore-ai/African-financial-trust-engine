@@ -194,22 +194,6 @@ def create_ui_transaction(body: ProductionTransaction, response: Response, ctx=D
     _, org, db = ctx
     return create_transaction(body, response, org, db, idempotency_key)
 
-@router.get("/v1/ui/audits/verify-chain")
-def verify_chain(ctx=Depends(current_user)):
-    _, org, db = ctx
-    events = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org.id)
-                        .order_by(AuditEvent.id.asc())).all()
-    previous = "0" * 64
-    errors = []
-    for event in events:
-        canonical = str(previous) + "|" + str(event.transaction_id) + "|" + str(event.decision) + "|" + str(event.score) + "|" + str(event.result_json)
-        expected = hashlib.sha256(canonical.encode()).hexdigest()
-        if event.previous_hash != previous or event.event_hash != expected:
-            errors.append({"audit_id": event.id, "issue": "hash_chain_mismatch"})
-        previous = event.event_hash
-    return {"valid": not errors, "checked": len(events), "errors": errors}
-
-
 @router.get("/v1/ui/documents")
 def ui_list_documents(limit: int = 100, ctx=Depends(current_user)):
     _, org, db = ctx
