@@ -1,45 +1,47 @@
-# No-cost hosting path for the current Trust Engine MVP
+# No-card hosting path for the Trust Engine MVP
 
-## Selected route: Antideploy Free
+## Selected route: Render Free web service + Neon Free PostgreSQL
 
-The user's constraint is strict: **no payment and no payment-card verification**. The current candidate is [Antideploy](https://antideploy.com/), whose published Free plan states that it includes one live server app and one PostgreSQL database, with no card required. It also limits the plan to 10 successful deployments per month, and apps sleep when idle. Review the provider's current plan before creating resources because free-tier terms can change.
+This route is intended to avoid both charges and payment-card verification:
+- **Web/API:** Render Free Web Service. Render's official first-deploy guide says no payment is required to create a free web service. Free instances sleep after 15 minutes idle and have an ephemeral filesystem.
+- **Database:** Neon Free PostgreSQL. Neon states its free tier does not require a credit card; it has finite compute/storage quotas and can scale to zero.
+- **Source control:** GitHub stores application code and schema migrations, not database records.
 
-Official provider information:
-- [FastAPI + PostgreSQL deployment guide](https://antideploy.com/blog/how-to-deploy-a-fastapi-app-with-postgres-for-free)
-- [Free hosting plan details](https://antideploy.com/blog/free-hosting-for-students-and-first-projects-in-india)
-- [Agent/deployment instructions](https://antideploy.com/agent.md)
+Official plan references:
+- Render free deployment: https://render.com/docs/your-first-deploy
+- Render free-service limitations: https://render.com/docs/free
+- Neon free-plan details: https://neon.com/blog/neon-free-plan-1-gb-per-project
 
-## Repository readiness
+## Why a separate database matters
 
-- `.python-version` pins Python 3.12.
-- `requirements.txt` already includes FastAPI, Uvicorn, SQLAlchemy, Psycopg 3, multipart upload support, PDF parsing, and Alembic.
-- `Procfile` explicitly starts `app.production_entry:app` so the host does not accidentally select the older prototype entry point.
-- The production ASGI entry point is `app.production_entry:app`.
-- The production database reads `DATABASE_URL` and converts common PostgreSQL URL prefixes to the Psycopg 3 dialect.
-- Alembic migrations are stored in `alembic/`. Antideploy's published guide says it runs `alembic upgrade head` before release when Alembic is detected; confirm the deploy log actually shows successful migrations before relying on the service.
+Do not rely on SQLite stored inside a free Render web service. Render's free web filesystem is ephemeral: data may disappear on restart, spin-down, or redeploy. Use Neon PostgreSQL for persistent transaction and audit data. Do not use the expiring Render Postgres instance as the permanent database.
 
-## Deployment steps
+## Service configuration
 
-1. Sign up at Antideploy using its official website, without adding a payment method.
-2. Connect GitHub and select `planetpurestore-ai/African-financial-trust-engine`.
-3. Select the branch `build/authenticated-trust-engine-app` for this MVP PR, or merge the reviewed changes to `main` first if the provider only deploys the default branch.
-4. Confirm the build detects FastAPI and the module `app.production_entry:app`. The server must bind to `0.0.0.0` and use the platform-provided `PORT`.
-5. Create/attach the included PostgreSQL database. Confirm the platform injects `DATABASE_URL` and that migrations finish successfully.
-6. Add the following environment variables as secrets in the host dashboard. Generate each as a long, random value; do not commit them to GitHub or share them in chat:
-   - `API_KEY_PEPPER`
-   - `BOOTSTRAP_TOKEN`
-   - `DATABASE_URL` should be supplied by the attached database; do not replace it with a guessed value.
-   - Leave `ALLOWED_ORIGINS` unset for the same-origin browser app unless a trusted separate origin is needed.
-7. Deploy and open `/health`. Continue only if it reports `status: ok` and `database: ok`.
-8. Open the root URL and use the first-time setup screen with `BOOTSTRAP_TOKEN` to create the first administrator. Keep the token private.
-9. Test sign-up/bootstrap, login/logout, invoice and evidence upload, verification, transaction details, audit hashes, CSV export, and organization isolation on the live service.
-10. Export the database and verify a restore procedure before storing any real business information.
+The production ASGI entry point is `app.production_entry:app`. The existing root Dockerfile installs requirements, runs `alembic upgrade head`, runs the runtime bootstrap, and starts Uvicorn on the platform-provided port.
 
-## Important limits and safety boundaries
+Required secret environment variables:
+- `DATABASE_URL`: Neon PostgreSQL connection string (use Neon’s pooled connection string for the app if available).
+- `API_KEY_PEPPER`: a long, random secret.
+- `BOOTSTRAP_TOKEN`: a separate long, random secret used for first-admin setup and authorized institution provisioning.
+- `ALLOWED_ORIGINS`: leave unset for same-origin browser use unless a trusted separate origin is required.
 
-- A live deploy is not the same as production certification. The browser workflow must be tested against the actual hosted database.
-- Free services may sleep, enforce usage limits, or change their terms. Keep regular database exports and never assume GitHub contains database records.
-- Do not use real confidential financial documents until access control, data retention, backup/restore, security, privacy and incident-response checks have been reviewed.
-- Uploaded documents are evidence submitted by a user; they are not independently verified bank records.
-- Bank/mobile-money connectors remain disconnected until actual provider credentials, approved access and provider-specific tests exist.
-- If Antideploy's account flow requires payment information or its free tier is unavailable, stop rather than accepting a paid trial. A no-card route must be verified in the actual signup flow.
+Never commit secrets to GitHub or post them in issues. Set them in the Render dashboard.
+
+## Deployment and verification checklist
+
+1. Create a Neon account and a Free PostgreSQL project at https://neon.tech/; do not enter payment details.
+2. Copy the PostgreSQL connection string from Neon. Keep it private.
+3. Open the Render service dashboard, select **Environment**, and set the three required variables above. Set `DATABASE_URL` to the Neon connection string. Generate the two application secrets in your password manager or another trusted random-secret generator.
+4. Confirm the service deploys from branch `build/authenticated-trust-engine-app` and the build log shows successful Alembic migrations.
+5. Open `/health`; continue only if it reports `status: ok` and `database: ok`.
+6. Open the root URL and use the first-time setup screen with `BOOTSTRAP_TOKEN` to create the first administrator. Keep the token private.
+7. Test login/logout, document upload and extraction, evidence submission, verification, transaction details, CSV export, audit-chain checks, and organization isolation.
+8. Verify persistence by creating a test transaction, restarting/redeploying the service, and confirming the record still exists in Neon.
+9. Export the database and test a restore before storing any real business information.
+
+## Current deployment status and safety boundary
+
+The new free Render web service has been created from the authenticated MVP branch. Until Neon is connected, the app falls back to local SQLite, which is only suitable for a short smoke test and **must not be used for real records** because Render's free filesystem is ephemeral. The service is not considered complete until Neon is connected, the secrets are configured, the migrations succeed against Neon, and live browser tests pass.
+
+Uploaded documents are evidence supplied by a user, not independently authenticated bank records. Bank/mobile-money connectors remain disconnected until real provider credentials, approved access and provider-specific tests exist. Free hosting is suitable for a prototype and acceptance testing, not production financial workloads.
