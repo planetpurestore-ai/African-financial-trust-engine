@@ -46,7 +46,7 @@ def test_missing_payment_does_not_claim_truth():
     items = [e for e in evidence() if e.evidence_type != "payment_record"]
     result = compare_invoice_to_evidence_set(invoice(), items)
     risk = assess(invoice(), items, duplicate=False)
-    assert result["verification_score"] == 100.0
+    assert result["verification_score"] == 80.0
     assert risk["decision"] in {"review", "approve", "reject"}
     assert risk["decision"] != "approve"
 

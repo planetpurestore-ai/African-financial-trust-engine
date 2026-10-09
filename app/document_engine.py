@@ -42,6 +42,8 @@ def _normalize_date(value):
 def extract_fields(text: str) -> dict:
     compact = re.sub(r"[ \t]+", " ", text)
     invoice_number = _first([r"(?:invoice\s*(?:no|number|#)|inv\.?\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"], compact)
+    purchase_order_number = _first([r"(?:purchase\s*order\s*(?:no|number|#)|PO(?:\s*(?:no|number|#))?)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"], compact)
+    reference_number = _first([r"(?:payment\s*reference|reference|receipt(?:\s*(?:no|number|#))?)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"], compact)
     supplier_name = _first([r"(?:supplier|seller|vendor)\s*[:=]\s*([^\n\r]+)", r"(?:from)\s*[:=]\s*([^\n\r]+)"], text)
     buyer_name = _first([r"(?:buyer|customer|bill\s*to)\s*[:=]\s*([^\n\r]+)", r"(?:to)\s*[:=]\s*([^\n\r]+)"], text)
     currency = _first([r"\b(USD|EUR|GBP|RWF|KES|UGX|TZS|ZAR|GHS|NGN|XOF|XAF)\b"], compact)
@@ -59,7 +61,7 @@ def extract_fields(text: str) -> dict:
     due_raw = _first([r"(?:due\s*date|payment\s*due)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     issue = _normalize_date(issue_raw)
     due = _normalize_date(due_raw)
-    fields = {"invoice_number": invoice_number, "supplier_name": supplier_name, "buyer_name": buyer_name, "currency": currency, "amount": amount, "issue_date": issue, "due_date": due}
+    fields = {"invoice_number": invoice_number, "purchase_order_number": purchase_order_number, "reference_number": reference_number, "supplier_name": supplier_name, "buyer_name": buyer_name, "currency": currency, "amount": amount, "issue_date": issue, "due_date": due}
     confidence = {k: (1.0 if v else 0.0) for k, v in fields.items()}
     required = ("invoice_number", "supplier_name", "buyer_name", "amount", "currency")
     missing_required = [k for k in required if not fields[k]]
