@@ -114,7 +114,7 @@ class ApiKeyPolicy(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scopes: Mapped[str] = mapped_column(Text, nullable=False)
-    revoked: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    revoked: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class UserAccount(Base):
