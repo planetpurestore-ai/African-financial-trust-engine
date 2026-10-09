@@ -51,7 +51,7 @@ async function loadTransactions(){
 async function showTransaction(id){
  try{
   const x=await api("/transactions/"+encodeURIComponent(id));
-  const tx=x.transaction||x;
+  const tx=x.transaction||x,inv=x.invoice||tx.invoice||tx;
   const evidence=x.evidence||tx.evidence||[],audit=x.audit||tx.audit||{};
   $("txResult").textContent=JSON.stringify(x,null,2);
   const existing=document.getElementById("txDetailCard");if(existing)existing.remove();
