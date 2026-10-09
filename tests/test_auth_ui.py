@@ -221,6 +221,10 @@ def test_authenticated_transaction_submission_and_audit_chain(client):
     assert body["audit_id"] is not None
     assert body["audit_hash"]
     assert body["verification"] is not None
+    detail = client.get("/v1/ui/transactions/" + body["transaction_id"])
+    assert detail.status_code == 200
+    assert detail.json()["invoice"]["invoice_number"] == "INV-MVP-1001"
+    assert detail.json()["audit"]["event_hash"] == body["audit_hash"]
     chain = client.get("/v1/ui/audits/verify-chain")
     assert chain.status_code == 200
     assert chain.json()["valid"] is True
@@ -247,3 +251,4 @@ def test_authenticated_transaction_submission_and_audit_chain(client):
     assert signed_in.status_code == 200
     assert client.get("/v1/ui/dashboard").json()["metrics"]["total"] == 0
     assert client.get("/v1/ui/transactions").json()["count"] == 0
+    assert client.get("/v1/ui/transactions/" + body["transaction_id"]).status_code == 404
