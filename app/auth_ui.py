@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
@@ -77,7 +77,7 @@ def current_user(request: Request, db: Session = Depends(db_session)):
 
 class BootstrapBody(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
-    email: EmailStr
+    email: str = Field(pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
     password: str = Field(min_length=12, max_length=128)
     organization_name: str = Field(min_length=2, max_length=200)
 
