@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, UploadFile, File
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.orm import Session
 
 from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document
@@ -163,11 +163,14 @@ def dashboard(ctx=Depends(current_user)):
                         .order_by(desc(AuditEvent.created_at)).limit(8)).all()
     activity = [{"decision": a.decision, "score": float(a.score),
         "transaction_id": a.transaction_id, "created_at": a.created_at.isoformat()} for a in audits]
+    scoped = Transaction.organization_id == org.id
+    total = db.scalar(select(func.count()).select_from(Transaction).where(scoped)) or 0
+    verified = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "verified")) or 0
+    review_required = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "review_required")) or 0
+    rejected = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "rejected")) or 0
     return {"user": _user_json(user, org), "transactions": rows, "activity": activity,
-        "metrics": {"total": len(rows),
-        "verified": sum(x["status"] == "verified" for x in rows),
-        "review_required": sum(x["status"] == "review_required" for x in rows),
-        "rejected": sum(x["status"] == "rejected" for x in rows)},
+        "metrics": {"total": total, "verified": verified,
+                    "review_required": review_required, "rejected": rejected},
         "generated_at": datetime.now(timezone.utc).isoformat()}
 
 @router.get("/v1/ui/transactions")
