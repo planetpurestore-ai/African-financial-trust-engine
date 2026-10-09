@@ -108,6 +108,15 @@ class IntegrationEvent(Base):
     __table_args__ = (UniqueConstraint("organization_id", "provider", "event_key", name="uq_integration_event"),)
 
 
+class ApiKeyPolicy(Base):
+    __tablename__ = "api_key_policies"
+    key_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, nullable=False)
+    revoked: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 class UserAccount(Base):
     __tablename__ = "user_accounts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
