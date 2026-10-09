@@ -234,6 +234,49 @@ def create_ui_transaction(body: ProductionTransaction, response: Response, ctx=D
     _, org, db = ctx
     return create_transaction(body, response, org, db, idempotency_key)
 
+@router.get("/v1/ui/transactions/{transaction_id}")
+def get_ui_transaction(transaction_id: str, ctx=Depends(current_user)):
+    _, org, db = ctx
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == org.id,
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    try:
+        payload = json.loads(tx.payload or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    audit = db.scalar(select(AuditEvent).where(
+        AuditEvent.transaction_id == tx.id,
+        AuditEvent.organization_id == org.id,
+    ).order_by(desc(AuditEvent.id)))
+    audit_data = None
+    if audit:
+        try:
+            result = json.loads(audit.result_json or "{}")
+        except (ValueError, TypeError):
+            result = {}
+        audit_data = {
+            "audit_id": audit.id,
+            "decision": audit.decision,
+            "score": float(audit.score),
+            "previous_hash": audit.previous_hash,
+            "event_hash": audit.event_hash,
+            "created_at": audit.created_at.isoformat(),
+            "verification": result,
+        }
+    return {
+        "transaction_id": tx.id,
+        "invoice_number": tx.invoice_number,
+        "status": tx.status,
+        "created_at": tx.created_at.isoformat(),
+        "invoice": payload.get("invoice"),
+        "evidence": payload.get("evidence", []),
+        "audit": audit_data,
+    }
+
+
 @router.get("/v1/ui/documents")
 def ui_list_documents(limit: int = 100, ctx=Depends(current_user)):
     _, org, db = ctx
