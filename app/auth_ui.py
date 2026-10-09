@@ -107,6 +107,10 @@ def bootstrap(body: BootstrapBody, request: Request, response: Response,
     if db.scalar(select(UserAccount.id).limit(1)):
         raise HTTPException(409, "Initial account setup has already been completed")
     email = str(body.email).strip().lower()
+    if not _valid_email(email):
+        raise HTTPException(422, "Enter a valid email address")
+    if db.scalar(select(UserAccount.id).where(UserAccount.email_normalized == email)):
+        raise HTTPException(409, "An account with this email already exists")
     org = db.scalar(select(Organization).order_by(Organization.id.asc()).limit(1))
     if org is None:
         org = Organization(name=body.organization_name.strip())
