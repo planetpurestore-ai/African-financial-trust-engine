@@ -6,12 +6,12 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
-from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent
+from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document\nfrom app.document_engine import sha256_bytes, extract_pdf_text, extract_fields\nfrom app.integrations import image_ocr, OCRProviderError
 from app.production_api import ProductionTransaction, create_transaction
 
 router = APIRouter(tags=["browser-auth"])
@@ -202,3 +202,60 @@ def verify_chain(ctx=Depends(current_user)):
             errors.append({"audit_id": event.id, "issue": "hash_chain_mismatch"})
         previous = event.event_hash
     return {"valid": not errors, "checked": len(events), "errors": errors}
+
+
+@router.get("/v1/ui/documents")
+def ui_list_documents(limit: int = 100, ctx=Depends(current_user)):
+    _, org, db = ctx
+    limit = max(1, min(limit, 100))
+    docs = db.scalars(select(Document).where(Document.organization_id == org.id)
+                      .order_by(desc(Document.created_at)).limit(limit)).all()
+    return {"count": len(docs), "documents": [{
+        "document_id": d.id, "filename": d.filename, "content_type": d.content_type,
+        "sha256": d.sha256, "extraction": json.loads(d.extraction_json or "{}"),
+        "created_at": d.created_at.isoformat(),
+    } for d in docs]}
+
+@router.post("/v1/ui/documents", status_code=201)
+def ui_upload_document(file: UploadFile = File(...), ctx=Depends(current_user)):
+    _, org, db = ctx
+    data = file.file.read()
+    if not data:
+        raise HTTPException(422, "Empty document")
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Document exceeds 10MB limit")
+    digest = sha256_bytes(data)
+    existing = db.scalar(select(Document).where(Document.organization_id == org.id, Document.sha256 == digest))
+    if existing:
+        return {"document_id": existing.id, "duplicate": True, "sha256": digest,
+                "filename": existing.filename, "extraction": json.loads(existing.extraction_json or "{}")}
+    content_type = file.content_type or "application/octet-stream"
+    if content_type == "application/pdf" or (file.filename or "").lower().endswith(".pdf"):
+        try:
+            extracted_text = extract_pdf_text(data)
+            extraction = extract_fields(extracted_text)
+            extraction["method"] = "pdf_text"
+        except Exception as exc:
+            raise HTTPException(422, "PDF extraction failed: " + type(exc).__name__)
+    elif content_type.startswith("image/"):
+        try:
+            ocr = image_ocr(data, content_type)
+            extracted_text = ocr["text"]
+            extraction = extract_fields(extracted_text)
+            extraction["method"] = "ocr"
+            extraction["ocr_provider"] = ocr["provider"]
+        except OCRProviderError as exc:
+            raise HTTPException(503, str(exc))
+    elif content_type.startswith("text/") or (file.filename or "").lower().endswith((".txt", ".csv")):
+        extracted_text = data.decode("utf-8", errors="replace")
+        extraction = extract_fields(extracted_text)
+        extraction["method"] = "text"
+    else:
+        raise HTTPException(415, "Supported document types: PDF, images, and text/CSV")
+    doc = Document(id=uuid.uuid4().hex, organization_id=org.id,
+        filename=(file.filename or "document")[:255], content_type=content_type,
+        sha256=digest, text=extracted_text, extraction_json=json.dumps(extraction, sort_keys=True))
+    db.add(doc)
+    db.commit()
+    return {"document_id": doc.id, "duplicate": False, "sha256": digest,
+            "filename": file.filename, "extraction": extraction}
