@@ -99,3 +99,47 @@ def test_dashboard_requires_session(client):
     response = client.get("/v1/ui/dashboard")
     assert response.status_code == 200
     assert response.json()["metrics"]["total"] == 0
+
+
+
+def test_additional_organizations_have_separate_admin_context(client):
+    headers = {"X-Bootstrap-Token": "test-bootstrap-token-long-enough"}
+    first = client.post(
+        "/v1/auth/bootstrap",
+        headers=headers,
+        json={
+            "full_name": "First Admin",
+            "email": "first@example.com",
+            "password": "a-long-test-password-123",
+            "organization_name": "First Institution",
+        },
+    )
+    assert first.status_code == 201
+    second = client.post(
+        "/v1/auth/organizations",
+        headers=headers,
+        json={
+            "full_name": "Second Admin",
+            "email": "second@example.com",
+            "password": "another-long-password-456",
+            "organization_name": "Second Institution",
+        },
+    )
+    assert second.status_code == 201
+    assert second.json()["organization"]["id"] != first.json()["user"]["organization_id"]
+
+    client.post("/v1/auth/logout")
+    signed_in = client.post(
+        "/v1/auth/login",
+        json={"email": "second@example.com", "password": "another-long-password-456"},
+    )
+    assert signed_in.status_code == 200
+    assert client.get("/v1/auth/me").json()["user"]["organization_name"] == "Second Institution"
+    assert client.get("/v1/ui/dashboard").json()["metrics"]["total"] == 0
+
+    client.post("/v1/auth/logout")
+    client.post(
+        "/v1/auth/login",
+        json={"email": "first@example.com", "password": "a-long-test-password-123"},
+    )
+    assert client.get("/v1/auth/me").json()["user"]["organization_name"] == "First Institution"
