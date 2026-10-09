@@ -227,3 +227,23 @@ def test_authenticated_transaction_submission_and_audit_chain(client):
     dashboard = client.get("/v1/ui/dashboard").json()
     assert dashboard["metrics"]["total"] == 1
     assert dashboard["transactions"][0]["invoice_number"] == "INV-MVP-1001"
+
+    provisioned = client.post(
+        "/v1/auth/organizations",
+        headers=headers,
+        json={
+            "full_name": "Second Admin",
+            "email": "second@example.com",
+            "password": "another-long-password-456",
+            "organization_name": "Second Institution",
+        },
+    )
+    assert provisioned.status_code == 201
+    client.post("/v1/auth/logout")
+    signed_in = client.post(
+        "/v1/auth/login",
+        json={"email": "second@example.com", "password": "another-long-password-456"},
+    )
+    assert signed_in.status_code == 200
+    assert client.get("/v1/ui/dashboard").json()["metrics"]["total"] == 0
+    assert client.get("/v1/ui/transactions").json()["count"] == 0
