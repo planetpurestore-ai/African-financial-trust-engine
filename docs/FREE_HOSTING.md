@@ -13,6 +13,7 @@ Official provider information:
 
 - `.python-version` pins Python 3.12.
 - `requirements.txt` already includes FastAPI, Uvicorn, SQLAlchemy, Psycopg 3, multipart upload support, PDF parsing, and Alembic.
+- `Procfile` explicitly starts `app.production_entry:app` so the host does not accidentally select the older prototype entry point.
 - The production ASGI entry point is `app.production_entry:app`.
 - The production database reads `DATABASE_URL` and converts common PostgreSQL URL prefixes to the Psycopg 3 dialect.
 - Alembic migrations are stored in `alembic/`. Antideploy's published guide says it runs `alembic upgrade head` before release when Alembic is detected; confirm the deploy log actually shows successful migrations before relying on the service.
