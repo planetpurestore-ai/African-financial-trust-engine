@@ -38,6 +38,14 @@ uvicorn app.main:app --reload
 
 Then open the review console at `http://127.0.0.1:8000/` or API documentation at `http://127.0.0.1:8000/docs`.
 
+## Browser workflow
+
+The authenticated browser workspace is served by the production entry point at `/` and `/dashboard`. It includes account sign-in and one-time administrator setup, organization-scoped dashboard metrics, transaction review, document upload and extraction, a verification form, audit-chain validation, and CSV export for transaction records.
+
+When a document is uploaded, supported text fields can be copied into the verification form as suggestions. These extracted values are not treated as proof of authenticity; the user must review them and supply supporting evidence. PDF text extraction works for text-based PDFs. Image OCR requires the configured OCR provider credential.
+
+The settings panel lists supported financial-source adapter slots and explicitly marks them as disconnected until real provider access is implemented and validated. See `docs/MVP_ACCEPTANCE_CHECKLIST.md` for acceptance criteria and the required controls for future live bank/mobile-money connectors.
+
 ## Core API
 
 ### Health
