@@ -143,3 +143,36 @@ def test_additional_organizations_have_separate_admin_context(client):
         json={"email": "first@example.com", "password": "a-long-test-password-123"},
     )
     assert client.get("/v1/auth/me").json()["user"]["organization_name"] == "First Institution"
+
+
+
+def test_bootstrap_rejects_invalid_email(client):
+    response = client.post(
+        "/v1/auth/bootstrap",
+        headers={"X-Bootstrap-Token": "test-bootstrap-token-long-enough"},
+        json={
+            "full_name": "Test Admin",
+            "email": "not-an-email",
+            "password": "a-long-test-password-123",
+            "organization_name": "Example Institution",
+        },
+    )
+    assert response.status_code == 422
+    assert client.get("/v1/auth/me").status_code == 401
+
+
+def test_bootstrap_rejects_duplicate_email_case_insensitively(client):
+    headers = {"X-Bootstrap-Token": "test-bootstrap-token-long-enough"}
+    payload = {
+        "full_name": "Test Admin",
+        "email": "admin@example.com",
+        "password": "a-long-test-password-123",
+        "organization_name": "Example Institution",
+    }
+    assert client.post("/v1/auth/bootstrap", headers=headers, json=payload).status_code == 201
+    duplicate = client.post(
+        "/v1/auth/organizations",
+        headers=headers,
+        json={**payload, "email": "ADMIN@example.com", "organization_name": "Second Institution"},
+    )
+    assert duplicate.status_code == 409
