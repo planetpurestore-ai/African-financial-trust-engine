@@ -211,11 +211,15 @@ def dashboard(ctx=Depends(current_user)):
         "generated_at": datetime.now(timezone.utc).isoformat()}
 
 @router.get("/v1/ui/transactions")
-def list_transactions(limit: int = 100, ctx=Depends(current_user)):
+def list_transactions(limit: int = 100, offset: int = 0, ctx=Depends(current_user)):
     _, org, db = ctx
     limit = max(1, min(limit, 100))
-    txs = db.scalars(select(Transaction).where(Transaction.organization_id == org.id)
-                     .order_by(desc(Transaction.created_at)).limit(limit)).all()
+    offset = max(0, offset)
+    scoped = Transaction.organization_id == org.id
+    total_count = db.scalar(select(func.count()).select_from(Transaction).where(scoped)) or 0
+    txs = db.scalars(select(Transaction).where(scoped)
+                     .order_by(desc(Transaction.created_at), desc(Transaction.id))
+                     .offset(offset).limit(limit)).all()
     rows = []
     for tx in txs:
         try:
@@ -226,7 +230,8 @@ def list_transactions(limit: int = 100, ctx=Depends(current_user)):
             "status": tx.status, "supplier_name": inv.get("supplier_name"),
             "buyer_name": inv.get("buyer_name"), "amount": inv.get("amount"),
             "currency": inv.get("currency"), "created_at": tx.created_at.isoformat()})
-    return {"count": len(rows), "transactions": rows}
+    return {"count": len(rows), "total_count": total_count, "offset": offset,
+            "limit": limit, "has_more": offset + len(rows) < total_count, "transactions": rows}
 
 @router.post("/v1/ui/transactions", status_code=201)
 def create_ui_transaction(body: ProductionTransaction, response: Response, ctx=Depends(current_user),
