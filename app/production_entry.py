@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import text
 from app.production_db import SessionLocal
 from app.production_api import router
+from app.auth_ui import router as browser_auth_router
 from app.api_docs import router as system_router
 from app.setup_api import router as setup_router
 from app.bank_grade_api import router as bank_grade_router
@@ -21,6 +22,7 @@ app.middleware("http")(request_size_guard)
 app.middleware("http")(bank_grade_security)
 app.include_router(system_router)
 app.include_router(router)
+app.include_router(browser_auth_router)
 app.include_router(setup_router)
 app.include_router(bank_grade_router)
 app.include_router(controls_router)
