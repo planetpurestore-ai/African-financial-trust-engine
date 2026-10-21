@@ -15,6 +15,7 @@ from app.production_db import SessionLocal, Organization, UserAccount, UserSessi
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
 from app.integrations import image_ocr, OCRProviderError
 from app.production_api import ProductionTransaction, create_transaction
+from app.security import read_upload_limited
 
 router = APIRouter(tags=["browser-auth"])
 COOKIE = "aft_session"
@@ -297,11 +298,9 @@ def ui_list_documents(limit: int = 100, ctx=Depends(current_user)):
 @router.post("/v1/ui/documents", status_code=201)
 def ui_upload_document(file: UploadFile = File(...), ctx=Depends(current_user)):
     _, org, db = ctx
-    data = file.file.read()
+    data = read_upload_limited(file, 10 * 1024 * 1024)
     if not data:
         raise HTTPException(422, "Empty document")
-    if len(data) > 10 * 1024 * 1024:
-        raise HTTPException(413, "Document exceeds 10MB limit")
     digest = sha256_bytes(data)
     existing = db.scalar(select(Document).where(Document.organization_id == org.id, Document.sha256 == digest))
     if existing:
