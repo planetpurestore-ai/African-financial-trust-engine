@@ -35,7 +35,7 @@ def _expiry(value):
 
 async def bank_grade_security(request: Request, call_next):
     path=request.url.path
-    if not path.startswith("/v1/") or path.startswith("/v1/organizations") or path.endswith("/webhook"):
+    if not path.startswith("/v1/") or path.startswith("/v1/organizations") or path.startswith("/v1/auth/") or path.startswith("/v1/ui/") or path.endswith("/webhook"):
         return await call_next(request)
     api_key=request.headers.get("X-API-Key")
     if not api_key: return await call_next(request)
