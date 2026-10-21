@@ -14,6 +14,7 @@ from app.risk_engine import assess
 from app.production_db import SessionLocal, Organization, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
+from app.security import read_upload_limited
 
 router = APIRouter(prefix="/v1", tags=["production"])
 
@@ -86,9 +87,8 @@ def list_keys(organization: Organization = Depends(require_api_key), db: Session
 
 @router.post("/documents", status_code=201)
 def upload_document(file: UploadFile = File(...), organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
-    data = file.file.read()
+    data = read_upload_limited(file, 10 * 1024 * 1024)
     if not data: raise HTTPException(422, "Empty document")
-    if len(data) > 10 * 1024 * 1024: raise HTTPException(413, "Document exceeds 10MB limit")
     digest = sha256_bytes(data)
     existing = db.scalar(select(Document).where(Document.organization_id == organization.id, Document.sha256 == digest))
     if existing:
