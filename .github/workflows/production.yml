@@ -22,6 +22,6 @@ jobs:
         run: |
           set -e
           curl --fail --show-error --silent --location --max-time 30 \
-            https://african-financial-trust-engine-browser2.onrender.com/health
+            https://aft-trust-engine-free-mvp.onrender.com/health
           echo
           echo "PUBLIC_HTTP_OK"
