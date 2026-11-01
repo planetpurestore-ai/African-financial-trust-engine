@@ -310,3 +310,69 @@ def test_login_attempts_are_rate_limited_across_requests(client):
     })
     assert limited.status_code == 429
     assert "Too many sign-in attempts" in limited.json()["detail"]
+
+
+def test_uploaded_document_can_be_linked_to_transaction_and_unlinked(client):
+    boot = client.post(
+        "/v1/auth/bootstrap",
+        headers={"X-Bootstrap-Token": "test-bootstrap-token-long-enough"},
+        json={
+            "full_name": "Link Admin",
+            "email": "link@example.com",
+            "password": "a-long-test-password-123",
+            "organization_name": "Link Institution",
+        },
+    )
+    assert boot.status_code == 201
+
+    uploaded = client.post(
+        "/v1/ui/documents",
+        files={"file": (
+            "invoice-link.txt",
+            "Invoice No: INV-LINK-1\\nSupplier: Supplier Ltd\\nBuyer: Buyer Ltd\\n"
+            "Currency: USD\\nTotal Due: 100.00",
+            "text/plain",
+        )},
+    )
+    assert uploaded.status_code == 201
+    document_id = uploaded.json()["document_id"]
+
+    transaction = client.post("/v1/ui/transactions", json={
+        "invoice": {
+            "invoice_number": "INV-LINK-1",
+            "supplier_name": "Supplier Ltd",
+            "buyer_name": "Buyer Ltd",
+            "amount": "100.00",
+            "currency": "USD",
+            "issue_date": "2026-10-01",
+            "due_date": "2026-11-01",
+        },
+        "evidence": [{
+            "evidence_id": "PO-LINK-1",
+            "evidence_type": "purchase_order",
+            "reference_number": "PO-LINK-1",
+            "supplier_name": "Supplier Ltd",
+            "buyer_name": "Buyer Ltd",
+            "amount": "100.00",
+            "currency": "USD",
+            "evidence_date": "2026-10-01",
+        }],
+    })
+    assert transaction.status_code == 201
+    transaction_id = transaction.json()["transaction_id"]
+
+    linked = client.post(f"/v1/ui/transactions/{transaction_id}/documents/{document_id}")
+    assert linked.status_code == 201
+    assert linked.json()["duplicate"] is False
+    repeated = client.post(f"/v1/ui/transactions/{transaction_id}/documents/{document_id}")
+    assert repeated.status_code == 201
+    assert repeated.json()["duplicate"] is True
+
+    detail = client.get(f"/v1/ui/transactions/{transaction_id}")
+    assert detail.status_code == 200
+    assert detail.json()["linked_documents"][0]["document_id"] == document_id
+    assert detail.json()["linked_documents"][0]["sha256"] == uploaded.json()["sha256"]
+
+    unlinked = client.delete(f"/v1/ui/transactions/{transaction_id}/documents/{document_id}")
+    assert unlinked.status_code == 200
+    assert client.get(f"/v1/ui/transactions/{transaction_id}").json()["linked_documents"] == []
