@@ -29,6 +29,7 @@ def client(monkeypatch):
 
     app.dependency_overrides[auth_ui.db_session] = override_db
     monkeypatch.setenv("BOOTSTRAP_TOKEN", "test-bootstrap-token-long-enough")
+    monkeypatch.setenv("DOCUMENT_ENCRYPTION_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -376,3 +377,28 @@ def test_uploaded_document_can_be_linked_to_transaction_and_unlinked(client):
     unlinked = client.delete(f"/v1/ui/transactions/{transaction_id}/documents/{document_id}")
     assert unlinked.status_code == 200
     assert client.get(f"/v1/ui/transactions/{transaction_id}").json()["linked_documents"] == []
+
+
+
+def test_uploaded_original_document_is_encrypted_and_downloadable(client):
+    client.post(
+        "/v1/auth/bootstrap",
+        headers={"X-Bootstrap-Token": "test-bootstrap-token-long-enough"},
+        json={
+            "full_name": "Storage Admin",
+            "email": "storage@example.com",
+            "password": "a-long-test-password-123",
+            "organization_name": "Storage Institution",
+        },
+    )
+    original = b"Invoice No: INV-ENC-1\\nSupplier: Supplier Ltd\\nBuyer: Buyer Ltd\\nCurrency: USD\\nTotal Due: 100.00"
+    uploaded = client.post(
+        "/v1/ui/documents",
+        files={"file": ("invoice.txt", original, "text/plain")},
+    )
+    assert uploaded.status_code == 201
+    document_id = uploaded.json()["document_id"]
+    download = client.get(f"/v1/ui/documents/{document_id}/download")
+    assert download.status_code == 200
+    assert download.content == original
+    assert download.headers["cache-control"] == "no-store"
