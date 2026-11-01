@@ -77,3 +77,19 @@ The following source-level changes have been made after the initial review:
 - The browser verification form now validates required invoice fields, date order, evidence presence and evidence references before submission, and reuses an idempotency key after an ambiguous retry.
 
 These are code changes, not a claim that the full automated suite passed or that the live deployment has been updated. The remaining high-priority gates still include shared login throttling, production database configuration/backup verification, external security testing, and a labelled accuracy evaluation. The active deployment must be smoke-tested against the exact release commit before these changes are treated as live.
+
+
+## Release update — 2026-11-01
+
+Implemented since the initial review:
+
+- Shared PostgreSQL-backed login throttling (8 failed attempts per 15-minute email/IP bucket), with regression tests.
+- Fail-closed production database configuration: the Docker image sets `APP_ENV=production`, and the service refuses to start without `DATABASE_URL`.
+- Authenticated administrator-only browser organisation provisioning.
+- Organisation-scoped document-to-transaction linking and unlinking.
+- Fernet-encrypted original document bytes stored in PostgreSQL, with an authenticated download endpoint. The encryption key is held in Render's server-side environment, not in source control or browser code.
+- Alembic migrations `0006_login_throttles` and `0007_encrypted_document_content` applied by the live service.
+
+The latest assurance suite reported 78 passing tests. The deployed service built successfully, applied migration `0007_encrypted_document_content`, started successfully, and Render marked the deployment live.
+
+Still open before sensitive institutional production use: the current free PostgreSQL plan expires on 2026-11-20; paid durable hosting, backups and a restore drill are not configured; the external DB inspection connector is blocked by an empty IP allowlist; malware scanning, retention/deletion controls, monitoring/alerting, independent penetration testing, and customer security/compliance review remain outstanding. Evidence is still caller-supplied and field-matched, not independently authenticated by banks, mobile-money operators, tax systems, or counterparties.
