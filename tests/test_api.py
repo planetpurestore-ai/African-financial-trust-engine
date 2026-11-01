@@ -68,9 +68,10 @@ def test_end_to_end_transaction_submission_persists_and_verifies():
     response = client.post("/transactions", json=payload)
     assert response.status_code == 201
     body = response.json()
-    assert body["decision"] == "review_required"
+    assert body["decision"] == "verified"
     assert body["verification"]["evidence_count"] == 2
-    assert "commercial_evidence_not_matched" in body["verification"]["failed_checks"]
+    assert body["verification"]["commercial_evidence_matched"] is True
+    assert body["verification"]["payment_evidence_matched"] is True
     assert client.get(f"/invoices/{invoice_number}").status_code == 200
     assert client.get("/evidence/API-TXN-PO").status_code == 200
     assert client.get(f"/audits/{invoice_number}").json()["count"] >= 1
