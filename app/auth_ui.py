@@ -355,12 +355,13 @@ def link_document_to_transaction(transaction_id: str, document_id: str, ctx=Depe
     except (ValueError, TypeError):
         payload = {}
     linked = payload.setdefault("linked_documents", [])
-    if document_id not in linked:
+    duplicate = document_id in linked
+    if not duplicate:
         linked.append(document_id)
         tx.payload = json.dumps(payload, sort_keys=True)
         db.commit()
     return {"status": "linked", "transaction_id": transaction_id, "document_id": document_id,
-            "duplicate": document_id in linked and len(linked) != len(set(linked))}
+            "duplicate": duplicate}
 
 
 @router.delete("/v1/ui/transactions/{transaction_id}/documents/{document_id}")
