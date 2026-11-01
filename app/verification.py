@@ -82,6 +82,8 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
         failed_checks.append("missing_commercial_evidence")
     elif not commercial_valid:
         failed_checks.append("commercial_evidence_not_matched")
+        if any(any(value is None for value in checks_by_evidence.get(e.evidence_id, {}).values()) for e in commercial):
+            failed_checks.append("missing_commercial_evidence_fields")
     if not payments:
         failed_checks.append("missing_payment_evidence")
     elif not payment_valid:
