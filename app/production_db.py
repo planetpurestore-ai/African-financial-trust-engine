@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint
+from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint, LargeBinary
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
 # Production deployments should provide DATABASE_URL. For a standalone browser
@@ -88,6 +88,7 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
+    encrypted_content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class IntegrationCredential(Base):
