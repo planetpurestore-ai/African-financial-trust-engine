@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, UploadFile, File
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, text
 from sqlalchemy.orm import Session
 
 from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document
@@ -152,14 +152,56 @@ def create_organization_account(
             "next_step": "Sign in with the admin email and password."}
 
 
+LOGIN_WINDOW_MINUTES = 15
+LOGIN_MAX_ATTEMPTS = 8
+
+def _login_bucket(email: str, request: Request) -> str:
+    # Store only a one-way digest of the normalized identifier and client IP.
+    client_ip = request.client.host if request.client else "unknown"
+    return hashlib.sha256((email + "|" + client_ip).encode()).hexdigest()
+
+def _record_login_attempt(db: Session, bucket: str) -> int:
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=LOGIN_WINDOW_MINUTES)
+    # Atomic upsert works on both PostgreSQL and modern SQLite, and is shared
+    # across application instances because state lives in the managed database.
+    row = db.execute(text("""
+        INSERT INTO login_throttles (bucket_key, window_started_at, attempts)
+        VALUES (:bucket, :now, 1)
+        ON CONFLICT (bucket_key) DO UPDATE SET
+          attempts = CASE
+            WHEN login_throttles.window_started_at < :cutoff THEN 1
+            ELSE login_throttles.attempts + 1 END,
+          window_started_at = CASE
+            WHEN login_throttles.window_started_at < :cutoff THEN :now
+            ELSE login_throttles.window_started_at END
+        RETURNING attempts
+    """), {"bucket": bucket, "now": now, "cutoff": cutoff}).first()
+    db.commit()
+    return int(row[0])
+
 @router.post("/v1/auth/login")
 def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(db_session)):
     email = str(body.email).strip().lower()
+    bucket = _login_bucket(email, request)
+    attempts = db.execute(text("""
+        SELECT attempts, window_started_at FROM login_throttles WHERE bucket_key=:bucket
+    """), {"bucket": bucket}).first()
+    if attempts:
+        window = attempts[1]
+        if window.tzinfo is None:
+            window = window.replace(tzinfo=timezone.utc)
+        if window >= datetime.now(timezone.utc) - timedelta(minutes=LOGIN_WINDOW_MINUTES) and int(attempts[0]) >= LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(429, "Too many sign-in attempts. Try again in 15 minutes.")
     user = db.scalar(select(UserAccount).where(UserAccount.email_normalized == email))
-    if not user:
+    valid = bool(user and user.active and _verify_password(body.password, user.password_hash))
+    if not valid:
+        count = _record_login_attempt(db, bucket)
+        if count >= LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(429, "Too many sign-in attempts. Try again in 15 minutes.")
         raise HTTPException(401, "Email or password is incorrect")
-    if not user.active or not _verify_password(body.password, user.password_hash):
-        raise HTTPException(401, "Email or password is incorrect")
+    db.execute(text("DELETE FROM login_throttles WHERE bucket_key=:bucket"), {"bucket": bucket})
+    db.commit()
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(403, "Organization unavailable")
