@@ -128,12 +128,11 @@ def bootstrap(body: BootstrapBody, request: Request, response: Response,
 @router.post("/v1/auth/organizations", status_code=201)
 def create_organization_account(
     body: OrganizationBootstrapBody,
-    x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"),
-    db: Session = Depends(db_session),
+    ctx=Depends(current_user),
 ):
-    expected = os.getenv("BOOTSTRAP_TOKEN")
-    if not expected or not x_bootstrap_token or not hmac.compare_digest(x_bootstrap_token, expected):
-        raise HTTPException(403, "Organization provisioning is not authorized")
+    actor, _, db = ctx
+    if actor.role != "admin":
+        raise HTTPException(403, "Administrator access is required to provision an organization")
     email = str(body.email).strip().lower()
     if not _valid_email(email):
         raise HTTPException(422, "Enter a valid email address")
