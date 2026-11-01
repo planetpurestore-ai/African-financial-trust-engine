@@ -119,3 +119,13 @@ Production hardening still required includes account invitation and lifecycle ma
 ## Vision
 
 The initial wedge is SME invoice and receivable verification for financial institutions. The longer-term ambition is to expand the trust layer across counterparties, payments, logistics and trade so African business activity becomes easier to verify, understand and finance.
+
+
+## Current engineering controls
+
+- Browser login uses shared PostgreSQL-backed throttling: eight failed attempts per email/IP bucket within 15 minutes trigger a temporary block.
+- Production containers fail closed if `DATABASE_URL` is missing; they do not silently use SQLite.
+- Uploaded original documents are encrypted at rest with the server-side `DOCUMENT_ENCRYPTION_KEY`, and authenticated users can download them.
+- Uploaded documents can be linked to and unlinked from organisation-owned transactions in the browser workspace.
+
+These controls improve the engineering MVP but do not replace independent penetration testing, malware scanning, durable paid database hosting, backup/restore drills, regulatory review, or authoritative source integrations. The current free Render PostgreSQL instance is scheduled to expire on 2026-11-20.
