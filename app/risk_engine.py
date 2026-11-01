@@ -35,7 +35,12 @@ def assess(invoice: Invoice, evidence: list[Evidence], duplicate: bool = False) 
         risk_flags.append("duplicate_invoice_number")
     if not commercial_matches:
         risk_flags.append("no_matching_commercial_evidence")
-    if payments and not payment_matches:
+    explicit_payment_conflict = any(
+        (e.amount is not None and e.amount != invoice.amount)
+        or (e.currency is not None and e.currency.upper() != invoice.currency.upper())
+        for e in payments
+    )
+    if explicit_payment_conflict:
         risk_flags.append("payment_amount_or_currency_conflict")
     if counterparty_mismatch:
         risk_flags.append("counterparty_inconsistency")
@@ -47,11 +52,9 @@ def assess(invoice: Invoice, evidence: list[Evidence], duplicate: bool = False) 
     risk_score = min(100, len(risk_flags) * 20)
     if payment_matches and commercial_matches:
         risk_score = max(0, risk_score - 20)
-    reject_flags = {
-        "duplicate_invoice_number",
-        "payment_amount_or_currency_conflict",
-        "counterparty_inconsistency",
-    }
+    # A confirmed duplicate or an explicit payment contradiction is a hard stop.
+    # Missing or inconsistent commercial-party fields remain human-review cases.
+    reject_flags = {"duplicate_invoice_number", "payment_amount_or_currency_conflict"}
     decision = "reject" if reject_flags.intersection(risk_flags) else ("review" if risk_flags else "approve")
     return {
         "risk_score": risk_score,
