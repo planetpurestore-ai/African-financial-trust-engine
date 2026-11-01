@@ -189,6 +189,8 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
     """), {"bucket": bucket}).first()
     if attempts:
         window = attempts[1]
+        if isinstance(window, str):
+            window = datetime.fromisoformat(window.replace("Z", "+00:00"))
         if window.tzinfo is None:
             window = window.replace(tzinfo=timezone.utc)
         if window >= datetime.now(timezone.utc) - timedelta(minutes=LOGIN_WINDOW_MINUTES) and int(attempts[0]) >= LOGIN_MAX_ATTEMPTS:
