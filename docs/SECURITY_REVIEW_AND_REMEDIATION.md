@@ -63,3 +63,17 @@ These tests exercise the current decision rules; they do not establish statistic
 4. Run a qualified external penetration test and remediate findings.
 5. Demonstrate backup restoration and incident-response readiness.
 6. Pilot with synthetic or explicitly authorised low-risk data; do not use sensitive production financial data until the above gates and customer approvals are satisfied.
+
+
+## Follow-up engineering changes — 2026-11-01
+
+The following source-level changes have been made after the initial review:
+
+- Upload reading now uses a bounded read of at most the configured limit plus one byte; the earlier unbounded-read issue is addressed in the implementation and has regression tests.
+- Verification now awards commercial-evidence credit only when one purchase-order/contract record matches supplier, buyer, amount and currency.
+- Payment-evidence credit now requires a record matching both amount and currency.
+- Risk assessment now flags missing or non-matching payment evidence and non-matching commercial evidence.
+- Verification responses explicitly identify evidence as caller-supplied and state that field consistency is not independent proof of document/payment authenticity.
+- The browser verification form now validates required invoice fields, date order, evidence presence and evidence references before submission, and reuses an idempotency key after an ambiguous retry.
+
+These are code changes, not a claim that the full automated suite passed or that the live deployment has been updated. The remaining high-priority gates still include shared login throttling, production database configuration/backup verification, external security testing, and a labelled accuracy evaluation. The active deployment must be smoke-tested against the exact release commit before these changes are treated as live.
