@@ -98,7 +98,7 @@ def test_mismatched_stored_evidence_requires_review():
     client.post("/evidence", json=_evidence(evidence_id, amount="9000.00"))
     body = client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()
     assert body["decision"] == "review_required"
-    assert body["verification_score"] == 65.0
+    assert body["verification_score"] == 45.0
     assert "amount_match" in body["failed_checks"]
 
 
@@ -107,8 +107,10 @@ def test_batch_verification_and_conflict_detection():
         _evidence("API-BATCH-CONTRACT", amount=None, evidence_type="contract"),
         _evidence("API-BATCH-PAYMENT", amount="10000.00", evidence_type="payment_record")],}
     body = client.post("/verify-batch", json=payload).json()
-    assert body["decision"] == "verified"
+    assert body["decision"] == "review_required"
     assert body["verification"]["evidence_count"] == 2
+    assert body["verification"]["commercial_evidence_matched"] is False
+    assert "commercial_evidence_not_matched" in body["verification"]["failed_checks"]
     assert body["verification"]["supporting_evidence"]["amount_match"] == ["API-BATCH-PAYMENT"]
 
     conflict = {"invoice": _invoice("API-BATCH-CONFLICT"), "evidence": [
