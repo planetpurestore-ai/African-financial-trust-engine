@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc, func, text
 from sqlalchemy.orm import Session
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.production_db import SessionLocal, Organization, UserAccount, UserSession, Transaction, AuditEvent, Document
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
@@ -21,6 +23,15 @@ router = APIRouter(tags=["browser-auth"])
 COOKIE = "aft_session"
 SESSION_HOURS = 12
 ROUNDS = 310_000
+
+def _document_cipher():
+    key = os.getenv("DOCUMENT_ENCRYPTION_KEY")
+    if not key:
+        raise HTTPException(503, "Encrypted document storage is not configured")
+    try:
+        return Fernet(key.encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
+        raise HTTPException(503, "Document encryption configuration is invalid")
 
 def db_session():
     db = SessionLocal()
@@ -340,6 +351,32 @@ def get_ui_transaction(transaction_id: str, ctx=Depends(current_user)):
     }
 
 
+@router.get("/v1/ui/documents/{document_id}/download")
+def ui_download_document(document_id: str, ctx=Depends(current_user)):
+    _, org, db = ctx
+    doc = db.scalar(select(Document).where(
+        Document.id == document_id, Document.organization_id == org.id
+    ))
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    if not doc.encrypted_content:
+        raise HTTPException(410, "Original file is not available for this document")
+    try:
+        original = _document_cipher().decrypt(doc.encrypted_content)
+    except InvalidToken:
+        raise HTTPException(500, "Stored document could not be decrypted")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", doc.filename or "document")[:180] or "document"
+    return Response(
+        content=original,
+        media_type=doc.content_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 @router.post("/v1/ui/transactions/{transaction_id}/documents/{document_id}", status_code=201)
 def link_document_to_transaction(transaction_id: str, document_id: str, ctx=Depends(current_user)):
     _, org, db = ctx
@@ -433,7 +470,8 @@ def ui_upload_document(file: UploadFile = File(...), ctx=Depends(current_user)):
         raise HTTPException(415, "Supported document types: PDF, images, and text/CSV")
     doc = Document(id=uuid.uuid4().hex, organization_id=org.id,
         filename=(file.filename or "document")[:255], content_type=content_type,
-        sha256=digest, text=extracted_text, extraction_json=json.dumps(extraction, sort_keys=True))
+        sha256=digest, text=extracted_text, extraction_json=json.dumps(extraction, sort_keys=True),
+        encrypted_content=_document_cipher().encrypt(data))
     db.add(doc)
     db.commit()
     return {"document_id": doc.id, "duplicate": False, "sha256": digest,
