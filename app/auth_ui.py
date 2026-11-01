@@ -314,6 +314,19 @@ def get_ui_transaction(transaction_id: str, ctx=Depends(current_user)):
             "created_at": audit.created_at.isoformat(),
             "verification": result,
         }
+    linked_ids = payload.get("linked_documents", [])
+    linked_docs = db.scalars(select(Document).where(
+        Document.organization_id == org.id, Document.id.in_(linked_ids)
+    )).all() if linked_ids else []
+    linked_by_id = {d.id: d for d in linked_docs}
+    linked_documents = [{
+        "document_id": doc_id,
+        "filename": linked_by_id[doc_id].filename,
+        "sha256": linked_by_id[doc_id].sha256,
+        "content_type": linked_by_id[doc_id].content_type,
+        "extraction": json.loads(linked_by_id[doc_id].extraction_json or "{}"),
+        "created_at": linked_by_id[doc_id].created_at.isoformat(),
+    } for doc_id in linked_ids if doc_id in linked_by_id]
     return {
         "transaction_id": tx.id,
         "invoice_number": tx.invoice_number,
@@ -321,8 +334,53 @@ def get_ui_transaction(transaction_id: str, ctx=Depends(current_user)):
         "created_at": tx.created_at.isoformat(),
         "invoice": payload.get("invoice"),
         "evidence": payload.get("evidence", []),
+        "linked_documents": linked_documents,
         "audit": audit_data,
     }
+
+
+@router.post("/v1/ui/transactions/{transaction_id}/documents/{document_id}", status_code=201)
+def link_document_to_transaction(transaction_id: str, document_id: str, ctx=Depends(current_user)):
+    _, org, db = ctx
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id, Transaction.organization_id == org.id
+    ))
+    doc = db.scalar(select(Document).where(
+        Document.id == document_id, Document.organization_id == org.id
+    ))
+    if not tx or not doc:
+        raise HTTPException(404, "Transaction or document not found")
+    try:
+        payload = json.loads(tx.payload or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    linked = payload.setdefault("linked_documents", [])
+    if document_id not in linked:
+        linked.append(document_id)
+        tx.payload = json.dumps(payload, sort_keys=True)
+        db.commit()
+    return {"status": "linked", "transaction_id": transaction_id, "document_id": document_id,
+            "duplicate": document_id in linked and len(linked) != len(set(linked))}
+
+
+@router.delete("/v1/ui/transactions/{transaction_id}/documents/{document_id}")
+def unlink_document_from_transaction(transaction_id: str, document_id: str, ctx=Depends(current_user)):
+    _, org, db = ctx
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id, Transaction.organization_id == org.id
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    try:
+        payload = json.loads(tx.payload or "{}")
+    except (ValueError, TypeError):
+        payload = {}
+    linked = payload.get("linked_documents", [])
+    if document_id in linked:
+        payload["linked_documents"] = [item for item in linked if item != document_id]
+        tx.payload = json.dumps(payload, sort_keys=True)
+        db.commit()
+    return {"status": "unlinked", "transaction_id": transaction_id, "document_id": document_id}
 
 
 @router.get("/v1/ui/documents")
