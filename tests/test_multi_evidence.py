@@ -39,9 +39,11 @@ def test_multiple_evidence_items_can_combine_to_verify_invoice():
         ],
     )
 
-    assert result["status"] == "verified"
-    assert result["verification_score"] == 100.0
+    assert result["status"] == "review_required"
+    assert result["verification_score"] == 80.0
     assert result["supporting_evidence"]["supplier_match"] == ["PO-100"]
+    assert result["commercial_evidence_matched"] is False
+    assert "commercial_evidence_not_matched" in result["failed_checks"]
     assert result["supporting_evidence"]["buyer_match"] == ["PO-100"]
     assert result["supporting_evidence"]["amount_match"] == ["PAY-100"]
     assert result["supporting_evidence"]["currency_match"] == ["PAY-100"]
