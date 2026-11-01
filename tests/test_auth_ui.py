@@ -296,3 +296,17 @@ def test_authenticated_document_upload_extracts_fields(client):
     listed = client.get("/v1/ui/documents")
     assert listed.status_code == 200
     assert listed.json()["count"] == 1
+
+
+
+def test_login_attempts_are_rate_limited_across_requests(client):
+    for attempt in range(auth_ui.LOGIN_MAX_ATTEMPTS - 1):
+        response = client.post("/v1/auth/login", json={
+            "email": "missing@example.com", "password": "wrong-password"
+        })
+        assert response.status_code == 401
+    limited = client.post("/v1/auth/login", json={
+        "email": "missing@example.com", "password": "wrong-password"
+    })
+    assert limited.status_code == 429
+    assert "Too many sign-in attempts" in limited.json()["detail"]
