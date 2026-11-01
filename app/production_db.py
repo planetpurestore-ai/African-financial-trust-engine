@@ -138,6 +138,12 @@ class UserSession(Base):
     revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+class LoginThrottle(Base):
+    __tablename__ = "login_throttles"
+    bucket_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
 def init_production_db():
     from alembic import command
     from alembic.config import Config
