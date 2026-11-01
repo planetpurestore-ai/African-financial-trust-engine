@@ -32,3 +32,32 @@ def test_payment_conflict_is_rejected():
     result = assess(invoice(), evidence)
     assert result["decision"] == "reject"
     assert "payment_amount_or_currency_conflict" in result["flags"]
+
+
+
+def test_commercial_evidence_must_match_invoice_parties_and_amount():
+    evidence = [
+        Evidence(evidence_id="PO-WRONG", evidence_type="purchase_order",
+                 reference_number="PO-WRONG", supplier_name="Other Supplier",
+                 buyer_name="Buyer", amount=Decimal("100"), currency="USD"),
+        Evidence(evidence_id="PAY-OK", evidence_type="payment_record",
+                 reference_number="PAY-OK", amount=Decimal("100"), currency="USD"),
+    ]
+    result = assess(invoice(), evidence)
+    assert result["decision"] == "review"
+    assert result["commercial_evidence_matches"] == 0
+    assert "no_matching_commercial_evidence" in result["flags"]
+
+
+def test_payment_without_currency_is_not_a_match():
+    evidence = [
+        Evidence(evidence_id="PO-OK", evidence_type="purchase_order",
+                 reference_number="PO-OK", supplier_name="Supplier",
+                 buyer_name="Buyer", amount=Decimal("100"), currency="USD"),
+        Evidence(evidence_id="PAY-NO-CURRENCY", evidence_type="payment_record",
+                 reference_number="PAY-NO-CURRENCY", amount=Decimal("100")),
+    ]
+    result = assess(invoice(), evidence)
+    assert result["decision"] == "review"
+    assert result["payment_matches"] == 0
+    assert "payment_not_matched" in result["flags"]
