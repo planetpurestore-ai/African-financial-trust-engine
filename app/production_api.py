@@ -5,7 +5,7 @@ import secrets
 import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, text
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
@@ -159,6 +159,10 @@ def list_integration_events(organization: Organization = Depends(require_api_key
 
 @router.post("/transactions", status_code=201)
 def create_transaction(body: ProductionTransaction, response: Response, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    # Serialize writes per organization so concurrent transactions cannot fork
+    # the previous-hash chain. The lock is held until this request commits/rolls back.
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:organization_id)"), {"organization_id": organization.id})
     if idempotency_key:
         existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
         if existing: response.status_code = 200; return _transaction_response(existing, db)
