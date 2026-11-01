@@ -8,7 +8,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker,
 # deployment with no managed database attached yet, use a local SQLite database
 # so the application can boot and be exercised end-to-end. This fallback is not
 # intended as the final production persistence layer.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trust_engine.db")
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+_raw_database_url = os.getenv("DATABASE_URL")
+if APP_ENV == "production" and not _raw_database_url:
+    raise RuntimeError("DATABASE_URL is required when APP_ENV=production; refusing non-persistent SQLite fallback")
+DATABASE_URL = _raw_database_url or "sqlite:///./trust_engine.db"
 
 def _database_url(url: str) -> str:
     if url.startswith("postgresql://"):
