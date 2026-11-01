@@ -2,7 +2,7 @@ name: Production assurance
 
 on:
   push:
-    branches: [main]
+    branches: [main, build/authenticated-trust-engine-app]
   pull_request:
 
 permissions:
