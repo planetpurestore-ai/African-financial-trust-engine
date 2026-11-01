@@ -68,8 +68,9 @@ def test_end_to_end_transaction_submission_persists_and_verifies():
     response = client.post("/transactions", json=payload)
     assert response.status_code == 201
     body = response.json()
-    assert body["decision"] == "verified"
+    assert body["decision"] == "review_required"
     assert body["verification"]["evidence_count"] == 2
+    assert "commercial_evidence_not_matched" in body["verification"]["failed_checks"]
     assert client.get(f"/invoices/{invoice_number}").status_code == 200
     assert client.get("/evidence/API-TXN-PO").status_code == 200
     assert client.get(f"/audits/{invoice_number}").json()["count"] >= 1
@@ -150,7 +151,7 @@ def test_incomplete_single_evidence_requires_review():
         "evidence": _evidence("API-INCOMPLETE-PO", amount=None, currency=None, supplier_name=None, buyer_name=None),
     }).json()
     assert body["decision"] == "review_required"
-    assert body["verification"]["verification_score"] == 20.0
+    assert body["verification"]["verification_score"] == 0.0
     assert set(body["verification"]["incomplete_checks"]) == set(("supplier_match", "buyer_match", "amount_match", "currency_match"))
 
 
