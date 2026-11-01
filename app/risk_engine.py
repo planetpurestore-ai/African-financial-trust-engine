@@ -39,7 +39,9 @@ def assess(invoice: Invoice, evidence: list[Evidence], duplicate: bool = False) 
         risk_flags.append("payment_amount_or_currency_conflict")
     if counterparty_mismatch:
         risk_flags.append("counterparty_inconsistency")
-    if not payment_matches:
+    if not payments:
+        risk_flags.append("payment_not_verified")
+    elif not payment_matches:
         risk_flags.append("payment_not_matched")
 
     risk_score = min(100, len(risk_flags) * 20)
