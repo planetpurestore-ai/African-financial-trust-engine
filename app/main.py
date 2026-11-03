@@ -13,7 +13,7 @@ from app.database import get_connection, initialize_database, list_verification_
 initialize_database()
 
 APP_VERSION = "1.0.0"
-DASHBOARD_PATH = Path(__file__).resolve().parent / "dashboard.html"
+DASHBOARD_PATH = Path(__file__).resolve().parent / "dashboard_design3.html"
 
 app = FastAPI(
     title="African Financial Trust — Trust Engine",
@@ -137,6 +137,36 @@ def dashboard():
 @app.get("/dashboard", include_in_schema=False)
 def dashboard_alias():
     return FileResponse(DASHBOARD_PATH, media_type="text/html")
+
+
+@app.get("/dashboard-data")
+def dashboard_data():
+    """Read-only dashboard summary from persisted verification audits and invoices."""
+    connection = get_connection()
+    try:
+        counts = connection.execute(
+            """SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN decision = 'verified' THEN 1 ELSE 0 END) AS verified,
+                      SUM(CASE WHEN decision = 'review_required' THEN 1 ELSE 0 END) AS flagged,
+                      SUM(CASE WHEN decision = 'rejected' THEN 1 ELSE 0 END) AS rejected
+               FROM verification_audits"""
+        ).fetchone()
+        recent = connection.execute(
+            """SELECT a.audit_id, a.invoice_number, a.decision, a.verification_score,
+                      a.passed_checks, a.total_checks, a.created_at,
+                      i.supplier_name, i.amount, i.currency
+               FROM verification_audits a
+               LEFT JOIN invoices i ON i.invoice_number = a.invoice_number
+               ORDER BY a.audit_id DESC
+               LIMIT 8"""
+        ).fetchall()
+        return {
+            "summary": {key: (counts[key] or 0) for key in ("total", "verified", "flagged", "rejected")},
+            "recent": [dict(row) for row in recent],
+            "geography": {"available": False, "reason": "Country attribution is not yet captured by the transaction schema."},
+        }
+    finally:
+        connection.close()
 
 
 @app.get("/health")
