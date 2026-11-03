@@ -38,6 +38,14 @@ uvicorn app.main:app --reload
 
 Then open the review console at `http://127.0.0.1:8000/` or API documentation at `http://127.0.0.1:8000/docs`.
 
+## Browser workflow
+
+The authenticated browser workspace is served by the production entry point at `/` and `/dashboard`. It includes account sign-in and one-time administrator setup, organization-scoped dashboard metrics, transaction review, document upload and extraction, a verification form, audit-chain validation, and CSV export for transaction records.
+
+When a document is uploaded, supported text fields can be copied into the verification form as suggestions. These extracted values are not treated as proof of authenticity; the user must review them and supply supporting evidence. PDF text extraction works for text-based PDFs. Image OCR requires the configured OCR provider credential.
+
+The settings panel lists supported financial-source adapter slots and explicitly marks them as disconnected until real provider access is implemented and validated. See `docs/MVP_ACCEPTANCE_CHECKLIST.md` for acceptance criteria and the required controls for future live bank/mobile-money connectors.
+
 ## Core API
 
 ### Health
@@ -106,8 +114,18 @@ GitHub Actions runs the same suite on pushes to `main`, pull requests targeting 
 
 This is a functional engineering MVP, not production financial infrastructure. The prototype is intentionally limited to structured evidence supplied by the caller. It does not yet connect to live bank, mobile-money, accounting, ERP, logistics or government data sources, and it does not make lending or credit decisions.
 
-Production work after the prototype includes authentication and authorization, encryption and secrets management, production database infrastructure, source integrations, richer verification and anomaly rules, observability, security testing, regulatory/compliance review, data-retention controls and institutional pilots.
+Production hardening still required includes account invitation and lifecycle management, password reset, MFA, login throttling, security and penetration testing, formal compliance review, data-retention controls, monitoring and alerting, tested backup/restore, and institutional pilots. The browser-authentication foundation is documented in `docs/BROWSER_AUTH.md`; it is not a claim of production certification.
 
 ## Vision
 
 The initial wedge is SME invoice and receivable verification for financial institutions. The longer-term ambition is to expand the trust layer across counterparties, payments, logistics and trade so African business activity becomes easier to verify, understand and finance.
+
+
+## Current engineering controls
+
+- Browser login uses shared PostgreSQL-backed throttling: eight failed attempts per email/IP bucket within 15 minutes trigger a temporary block.
+- Production containers fail closed if `DATABASE_URL` is missing; they do not silently use SQLite.
+- Uploaded original documents are encrypted at rest with the server-side `DOCUMENT_ENCRYPTION_KEY`, and authenticated users can download them.
+- Uploaded documents can be linked to and unlinked from organisation-owned transactions in the browser workspace.
+
+These controls improve the engineering MVP but do not replace independent penetration testing, malware scanning, durable paid database hosting, backup/restore drills, regulatory review, or authoritative source integrations. The current free Render PostgreSQL instance is scheduled to expire on 2026-11-20.

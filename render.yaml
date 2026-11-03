@@ -1,13 +1,6 @@
-databases:
-  - name: trust-engine-db
-    plan: free
-    region: frankfurt
-    databaseName: trust_engine_db
-    user: trust_engine_db_user
-
 services:
   - type: web
-    name: african-financial-trust-engine-browser2
+    name: aft-trust-engine-free-mvp
     runtime: docker
     plan: free
     region: frankfurt
@@ -15,10 +8,8 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: trust-engine-db
-          property: connectionString
+        sync: false
       - key: API_KEY_PEPPER
-        generateValue: true
+        sync: false
       - key: BOOTSTRAP_TOKEN
-        generateValue: true
+        sync: false

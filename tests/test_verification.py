@@ -62,7 +62,7 @@ def test_mismatched_amount_is_lower_than_a_clean_match():
     result = compare_invoice_to_evidence(make_invoice(), make_po("9000.00"))
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 65.0
+    assert result["verification_score"] == 45.0
     assert "amount_match" in result["failed_checks"]
 
 
@@ -76,8 +76,8 @@ def test_missing_evidence_fields_score_zero_and_require_review():
     result = compare_invoice_to_evidence(make_invoice(), evidence)
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 20.0
-    assert len([x for x in result["failed_checks"] if x.startswith("missing_")]) == 1
+    assert result["verification_score"] == 0.0
+    assert len([x for x in result["failed_checks"] if x.startswith("missing_")]) == 2
 
 
 def test_conflicting_evidence_is_penalized():
@@ -94,5 +94,51 @@ def test_conflicting_evidence_is_penalized():
     result = compare_invoice_to_evidence_set(make_invoice(), [make_po(), conflicting_payment])
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 85.0
+    assert result["verification_score"] == 50.0
     assert "amount_match" in result["conflicts"]
+
+
+
+def test_evidence_presence_without_matching_fields_does_not_count_as_verified():
+    invoice = make_invoice()
+    weak_po = Evidence(
+        evidence_id="PO-WEAK",
+        evidence_type="purchase_order",
+        reference_number="PO-WEAK",
+    )
+    weak_payment = Evidence(
+        evidence_id="PAY-WEAK",
+        evidence_type="payment_record",
+        reference_number="PAY-WEAK",
+    )
+    result = compare_invoice_to_evidence_set(invoice, [weak_po, weak_payment])
+    assert result["status"] == "review_required"
+    assert result["commercial_evidence_matched"] is False
+    assert result["payment_evidence_matched"] is False
+    assert "commercial_evidence_not_matched" in result["failed_checks"]
+    assert "payment_evidence_not_matched" in result["failed_checks"]
+
+
+def test_payment_record_must_match_both_amount_and_currency():
+    invoice = make_invoice()
+    po = make_po()
+    wrong_currency_payment = Evidence(
+        evidence_id="PAY-EUR",
+        evidence_type="payment_record",
+        reference_number="PAY-EUR",
+        supplier_name="Supplier Ltd",
+        buyer_name="Buyer Ltd",
+        amount=Decimal("10000.00"),
+        currency="EUR",
+    )
+    result = compare_invoice_to_evidence_set(invoice, [po, wrong_currency_payment])
+    assert result["status"] == "review_required"
+    assert result["payment_evidence_matched"] is False
+    assert "payment_evidence_not_matched" in result["failed_checks"]
+
+
+def test_matching_evidence_discloses_that_source_authenticity_is_not_proven():
+    result = compare_invoice_to_evidence_set(make_invoice(), [make_po(), make_payment()])
+    assert result["status"] == "verified"
+    assert result["evidence_provenance"] == "caller_supplied_unverified"
+    assert "not independent proof" in result["authenticity_note"]

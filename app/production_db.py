@@ -1,14 +1,18 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint
+from sqlalchemy import create_engine, String, Text, DateTime, Integer, Numeric, ForeignKey, UniqueConstraint, LargeBinary
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 
 # Production deployments should provide DATABASE_URL. For a standalone browser
 # deployment with no managed database attached yet, use a local SQLite database
 # so the application can boot and be exercised end-to-end. This fallback is not
 # intended as the final production persistence layer.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./trust_engine.db")
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
+_raw_database_url = os.getenv("DATABASE_URL")
+if APP_ENV == "production" and not _raw_database_url:
+    raise RuntimeError("DATABASE_URL is required when APP_ENV=production; refusing non-persistent SQLite fallback")
+DATABASE_URL = _raw_database_url or "sqlite:///./trust_engine.db"
 
 def _database_url(url: str) -> str:
     if url.startswith("postgresql://"):
@@ -57,6 +61,8 @@ class Transaction(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_number: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
+    country_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="received", nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -84,6 +90,7 @@ class Document(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
+    encrypted_content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class IntegrationCredential(Base):
@@ -106,6 +113,43 @@ class IntegrationEvent(Base):
     normalized_json: Mapped[str] = mapped_column(Text, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "provider", "event_key", name="uq_integration_event"),)
+
+
+class ApiKeyPolicy(Base):
+    __tablename__ = "api_key_policies"
+    key_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scopes: Mapped[str] = mapped_column(Text, nullable=False)
+    revoked: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+class UserAccount(Base):
+    __tablename__ = "user_accounts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    full_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    email_normalized: Mapped[str] = mapped_column(String(254), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(30), default="admin", nullable=False)
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+class LoginThrottle(Base):
+    __tablename__ = "login_throttles"
+    bucket_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 def init_production_db():
     from alembic import command

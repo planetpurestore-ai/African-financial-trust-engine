@@ -33,3 +33,15 @@ async def request_size_guard(request: Request, call_next):
 def allowed_origins() -> list[str]:
     raw = os.getenv("ALLOWED_ORIGINS", "").strip()
     return [x.strip() for x in raw.split(",") if x.strip()]
+
+
+def read_upload_limited(upload_file, max_bytes: int) -> bytes:
+    """Read at most max_bytes + 1 bytes so oversized uploads cannot be fully buffered."""
+    from fastapi import HTTPException
+
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    data = upload_file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail="Document exceeds configured size limit")
+    return data

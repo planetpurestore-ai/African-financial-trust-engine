@@ -35,9 +35,10 @@ def test_verify_endpoint_returns_explainable_result_and_audit_id():
         supplier_name=" supplier ltd ", buyer_name="BUYER LTD", currency="usd")})
     assert response.status_code == 200
     body = response.json()
-    assert body["decision"] == "verified"
+    assert body["decision"] == "review_required"
     assert isinstance(body["audit_id"], int)
-    assert body["verification"]["verification_score"] == 100.0
+    assert body["verification"]["verification_score"] == 80.0
+    assert "missing_payment_evidence" in body["verification"]["failed_checks"]
 
 
 def test_verify_endpoint_rejects_invalid_invoice_dates():
@@ -54,8 +55,8 @@ def test_invoice_and_evidence_can_be_stored_and_verified():
     assert client.get(f"/evidence/{evidence_id}").status_code == 200
     verification = client.post(f"/verify-stored/{invoice_number}/{evidence_id}")
     assert verification.status_code == 200
-    assert verification.json()["decision"] == "verified"
-    assert client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()["verification_score"] == 100.0
+    assert verification.json()["decision"] == "review_required"
+    assert client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()["verification_score"] == 80.0
 
 
 def test_end_to_end_transaction_submission_persists_and_verifies():
@@ -69,6 +70,8 @@ def test_end_to_end_transaction_submission_persists_and_verifies():
     body = response.json()
     assert body["decision"] == "verified"
     assert body["verification"]["evidence_count"] == 2
+    assert body["verification"]["commercial_evidence_matched"] is True
+    assert body["verification"]["payment_evidence_matched"] is True
     assert client.get(f"/invoices/{invoice_number}").status_code == 200
     assert client.get("/evidence/API-TXN-PO").status_code == 200
     assert client.get(f"/audits/{invoice_number}").json()["count"] >= 1
@@ -96,7 +99,7 @@ def test_mismatched_stored_evidence_requires_review():
     client.post("/evidence", json=_evidence(evidence_id, amount="9000.00"))
     body = client.post(f"/verification-summary/{invoice_number}/{evidence_id}").json()
     assert body["decision"] == "review_required"
-    assert body["verification_score"] == 75.0
+    assert body["verification_score"] == 45.0
     assert "amount_match" in body["failed_checks"]
 
 
@@ -105,8 +108,10 @@ def test_batch_verification_and_conflict_detection():
         _evidence("API-BATCH-CONTRACT", amount=None, evidence_type="contract"),
         _evidence("API-BATCH-PAYMENT", amount="10000.00", evidence_type="payment_record")],}
     body = client.post("/verify-batch", json=payload).json()
-    assert body["decision"] == "verified"
+    assert body["decision"] == "review_required"
     assert body["verification"]["evidence_count"] == 2
+    assert body["verification"]["commercial_evidence_matched"] is False
+    assert "commercial_evidence_not_matched" in body["verification"]["failed_checks"]
     assert body["verification"]["supporting_evidence"]["amount_match"] == ["API-BATCH-PAYMENT"]
 
     conflict = {"invoice": _invoice("API-BATCH-CONFLICT"), "evidence": [
@@ -125,7 +130,7 @@ def test_audit_history_records_verification():
     body = history.json()
     assert body["count"] >= 1
     assert body["audits"][0]["audit_id"] == audit_id
-    assert body["audits"][0]["decision"] == "verified"
+    assert body["audits"][0]["decision"] == "review_required"
 
 
 def test_audit_history_honors_limit():

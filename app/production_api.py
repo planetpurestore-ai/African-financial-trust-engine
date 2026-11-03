@@ -4,8 +4,8 @@ import os
 import secrets
 import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
-from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select, desc, text, func
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
@@ -14,6 +14,7 @@ from app.risk_engine import assess
 from app.production_db import SessionLocal, Organization, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
+from app.security import read_upload_limited
 
 router = APIRouter(prefix="/v1", tags=["production"])
 
@@ -44,9 +45,75 @@ def require_api_key(x_api_key: str | None = Header(default=None), db: Session = 
         raise HTTPException(401, "Invalid API key")
     return db.get(Organization, key.organization_id)
 
+AFRICAN_COUNTRIES = {
+    "DZ": "Algeria",
+    "AO": "Angola",
+    "BJ": "Benin",
+    "BW": "Botswana",
+    "BF": "Burkina Faso",
+    "BI": "Burundi",
+    "CV": "Cabo Verde",
+    "CM": "Cameroon",
+    "CF": "Central African Republic",
+    "TD": "Chad",
+    "KM": "Comoros",
+    "CG": "Republic of the Congo",
+    "CD": "Democratic Republic of the Congo",
+    "CI": "Côte d’Ivoire",
+    "DJ": "Djibouti",
+    "EG": "Egypt",
+    "GQ": "Equatorial Guinea",
+    "ER": "Eritrea",
+    "SZ": "Eswatini",
+    "ET": "Ethiopia",
+    "GA": "Gabon",
+    "GM": "Gambia",
+    "GH": "Ghana",
+    "GN": "Guinea",
+    "GW": "Guinea-Bissau",
+    "KE": "Kenya",
+    "LS": "Lesotho",
+    "LR": "Liberia",
+    "LY": "Libya",
+    "MG": "Madagascar",
+    "MW": "Malawi",
+    "ML": "Mali",
+    "MR": "Mauritania",
+    "MU": "Mauritius",
+    "MA": "Morocco",
+    "MZ": "Mozambique",
+    "NA": "Namibia",
+    "NE": "Niger",
+    "NG": "Nigeria",
+    "RW": "Rwanda",
+    "ST": "Sao Tome and Principe",
+    "SN": "Senegal",
+    "SC": "Seychelles",
+    "SL": "Sierra Leone",
+    "SO": "Somalia",
+    "ZA": "South Africa",
+    "SS": "South Sudan",
+    "SD": "Sudan",
+    "TZ": "Tanzania",
+    "TG": "Togo",
+    "TN": "Tunisia",
+    "UG": "Uganda",
+    "ZM": "Zambia",
+    "ZW": "Zimbabwe"
+}
+
 class ProductionTransaction(BaseModel):
     invoice: Invoice
     evidence: list[Evidence] = Field(min_length=1, max_length=100)
+    country_code: str = Field(min_length=2, max_length=2, description="ISO 3166-1 alpha-2 code for the African country where the commercial transaction took place")
+
+    @field_validator("country_code")
+    @classmethod
+    def validate_african_country(cls, value: str) -> str:
+        code = value.strip().upper()
+        if code not in AFRICAN_COUNTRIES:
+            raise ValueError("country_code must be a supported African ISO 3166-1 alpha-2 code")
+        return code
 
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
@@ -86,9 +153,8 @@ def list_keys(organization: Organization = Depends(require_api_key), db: Session
 
 @router.post("/documents", status_code=201)
 def upload_document(file: UploadFile = File(...), organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
-    data = file.file.read()
+    data = read_upload_limited(file, 10 * 1024 * 1024)
     if not data: raise HTTPException(422, "Empty document")
-    if len(data) > 10 * 1024 * 1024: raise HTTPException(413, "Document exceeds 10MB limit")
     digest = sha256_bytes(data)
     existing = db.scalar(select(Document).where(Document.organization_id == organization.id, Document.sha256 == digest))
     if existing:
@@ -159,6 +225,10 @@ def list_integration_events(organization: Organization = Depends(require_api_key
 
 @router.post("/transactions", status_code=201)
 def create_transaction(body: ProductionTransaction, response: Response, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    # Serialize writes per organization so concurrent transactions cannot fork
+    # the previous-hash chain. The lock is held until this request commits/rolls back.
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:organization_id)"), {"organization_id": organization.id})
     if idempotency_key:
         existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
         if existing: response.status_code = 200; return _transaction_response(existing, db)
@@ -167,7 +237,7 @@ def create_transaction(body: ProductionTransaction, response: Response, organiza
     duplicate = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.invoice_number == body.invoice.invoice_number)) is not None
     verification = compare_invoice_to_evidence_set(body.invoice, body.evidence); risk = assess(body.invoice, body.evidence, duplicate=duplicate)
     decision = "verified" if verification["status"] == "verified" and risk["decision"] == "approve" else ("rejected" if risk["decision"] == "reject" else "review_required"); verification["risk"] = risk
-    tx = Transaction(id=uuid.uuid4().hex, organization_id=organization.id, invoice_number=body.invoice.invoice_number, payload=json.dumps(body.model_dump(mode="json")), status=decision, idempotency_key=idempotency_key); db.add(tx); db.flush()
+    tx = Transaction(id=uuid.uuid4().hex, organization_id=organization.id, invoice_number=body.invoice.invoice_number, country_code=body.country_code, country_name=AFRICAN_COUNTRIES[body.country_code], payload=json.dumps(body.model_dump(mode="json")), status=decision, idempotency_key=idempotency_key); db.add(tx); db.flush()
     previous = db.scalar(select(AuditEvent).where(AuditEvent.organization_id == organization.id).order_by(desc(AuditEvent.id))); previous_hash = previous.event_hash if previous else "0" * 64
     result_json = json.dumps(verification, sort_keys=True, separators=(",", ":")); canonical = f"{previous_hash}|{tx.id}|{decision}|{verification['verification_score']}|{result_json}"; event_hash = hashlib.sha256(canonical.encode()).hexdigest()
     db.add(AuditEvent(organization_id=organization.id, transaction_id=tx.id, decision=decision, score=verification["verification_score"], result_json=result_json, previous_hash=previous_hash, event_hash=event_hash)); db.commit()
@@ -183,6 +253,8 @@ def _transaction_response(tx: Transaction, db: Session):
     return {
         "transaction_id": tx.id,
         "invoice_number": tx.invoice_number,
+        "country_code": tx.country_code,
+        "country_name": tx.country_name,
         "status": tx.status,
         "supplier_name": invoice.get("supplier_name"),
         "buyer_name": invoice.get("buyer_name"),
@@ -206,6 +278,19 @@ def get_transaction(transaction_id: str, organization: Organization = Depends(re
 def list_transactions(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
     limit = max(1, min(limit, 100)); rows = db.scalars(select(Transaction).where(Transaction.organization_id == organization.id).order_by(desc(Transaction.created_at)).limit(limit)).all()
     return {"count": len(rows), "transactions": [_transaction_response(row, db) for row in rows]}
+
+@router.get("/analytics/countries")
+def country_activity(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
+    rows = db.execute(
+        select(Transaction.country_code, Transaction.country_name, func.count(Transaction.id).label("transactions"))
+        .where(Transaction.organization_id == organization.id)
+        .group_by(Transaction.country_code, Transaction.country_name)
+        .order_by(desc(func.count(Transaction.id)), Transaction.country_name)
+    ).all()
+    return {
+        "count": sum(row.transactions for row in rows),
+        "countries": [{"country_code": row.country_code, "country_name": row.country_name, "transactions": row.transactions} for row in rows],
+    }
 
 @router.get("/audits/{transaction_id}")
 def get_audit(transaction_id: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):

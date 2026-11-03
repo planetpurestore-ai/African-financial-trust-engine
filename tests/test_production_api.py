@@ -73,6 +73,10 @@ def test_production_transaction_round_trip():
     assert result["verification"]["verification_score"] == 100.0
     assert result["audit_hash"]
 
+    audit_integrity = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
+    assert audit_integrity.status_code == 200
+    assert audit_integrity.json()["valid"] is True
+
     repeat = client.post(
         "/v1/transactions",
         headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},

@@ -4,12 +4,7 @@ from app.models import Invoice
 from app.evidence import Evidence
 
 CHECK_NAMES = ("supplier_match", "buyer_match", "amount_match", "currency_match")
-CHECK_WEIGHTS = {
-    "supplier_match": 15.0,
-    "buyer_match": 15.0,
-    "amount_match": 15.0,
-    "currency_match": 15.0,
-}
+CHECK_WEIGHTS = {name: 15.0 for name in CHECK_NAMES}
 COMMERCIAL_EVIDENCE_WEIGHT = 20.0
 PAYMENT_EVIDENCE_WEIGHT = 20.0
 
@@ -54,37 +49,48 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
 
     passed = sum(checks.values())
     core_score = sum(CHECK_WEIGHTS[name] for name, value in checks.items() if value)
-
     items = evidence_items or []
-    has_commercial = any(e.evidence_type in {"purchase_order", "contract"} for e in items)
-    has_payment = any(e.evidence_type == "payment_record" for e in items)
+    commercial = [e for e in items if e.evidence_type in {"purchase_order", "contract"}]
+    payments = [e for e in items if e.evidence_type == "payment_record"]
+
+    # Evidence classes earn credit only when a single record of that class
+    # contains the required matching fields. Presence alone is not proof.
+    commercial_valid = any(
+        all(_checks_for_evidence_from_map(checks_by_evidence, e.evidence_id).get(k) is True
+            for k in CHECK_NAMES)
+        for e in commercial
+    )
+    payment_valid = any(
+        checks_by_evidence.get(e.evidence_id, {}).get("amount_match") is True
+        and checks_by_evidence.get(e.evidence_id, {}).get("currency_match") is True
+        for e in payments
+    )
 
     verification_score = core_score
-    if has_commercial:
+    if commercial_valid:
         verification_score += COMMERCIAL_EVIDENCE_WEIGHT
-    if has_payment:
+    if payment_valid:
         verification_score += PAYMENT_EVIDENCE_WEIGHT
-
-    # Conflicting evidence must materially reduce confidence. Missing evidence
-    # reduces confidence as well, rather than producing a misleading 75/100.
     verification_score -= len(conflicts) * 15.0
     verification_score = round(max(0.0, min(100.0, verification_score)), 2)
 
-    hard_conflict = bool(conflicts)
-    complete_core_checks = passed == len(CHECK_NAMES) and not incomplete_checks and not hard_conflict
-    evidence_complete = has_commercial and has_payment
-    verified = complete_core_checks and evidence_complete
-    status = "verified" if verified else "review_required"
-
+    complete_core_checks = passed == len(CHECK_NAMES) and not incomplete_checks and not conflicts
+    verified = complete_core_checks and commercial_valid and payment_valid
     failed_checks = [name for name, value in checks.items() if not value]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
-    if not has_commercial:
+    if not commercial:
         failed_checks.append("missing_commercial_evidence")
-    if not has_payment:
+    elif not commercial_valid:
+        failed_checks.append("commercial_evidence_not_matched")
+        if any(any(value is None for value in checks_by_evidence.get(e.evidence_id, {}).values()) for e in commercial):
+            failed_checks.append("missing_commercial_evidence_fields")
+    if not payments:
         failed_checks.append("missing_payment_evidence")
+    elif not payment_valid:
+        failed_checks.append("payment_evidence_not_matched")
 
     return {
-        "status": status,
+        "status": "verified" if verified else "review_required",
         "checks": checks,
         "failed_checks": failed_checks,
         "conflicts": conflicts,
@@ -94,9 +100,17 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
         "verification_score": verification_score,
         "evidence_count": len(checks_by_evidence),
         "supporting_evidence": supporting_evidence,
-        "commercial_evidence_present": has_commercial,
-        "payment_evidence_present": has_payment,
+        "commercial_evidence_present": bool(commercial),
+        "payment_evidence_present": bool(payments),
+        "commercial_evidence_matched": commercial_valid,
+        "payment_evidence_matched": payment_valid,
+        "evidence_provenance": "caller_supplied_unverified",
+        "authenticity_note": "Field consistency is not independent proof that a document or payment record is genuine.",
     }
+
+
+def _checks_for_evidence_from_map(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_id: str) -> dict[str, bool | None]:
+    return checks_by_evidence.get(evidence_id, {})
 
 
 def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
