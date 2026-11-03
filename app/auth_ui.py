@@ -248,7 +248,7 @@ def dashboard(ctx=Depends(current_user)):
         except (ValueError, TypeError):
             inv = {}
         rows.append({"transaction_id": tx.id, "invoice_number": tx.invoice_number,
-            "status": tx.status, "supplier_name": inv.get("supplier_name"),
+            "status": tx.status, "country_code": tx.country_code, "country_name": tx.country_name, "supplier_name": inv.get("supplier_name"),
             "buyer_name": inv.get("buyer_name"), "amount": inv.get("amount"),
             "currency": inv.get("currency"), "created_at": tx.created_at.isoformat()})
     audits = db.scalars(select(AuditEvent).where(AuditEvent.organization_id == org.id)
@@ -260,7 +260,17 @@ def dashboard(ctx=Depends(current_user)):
     verified = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "verified")) or 0
     review_required = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "review_required")) or 0
     rejected = db.scalar(select(func.count()).select_from(Transaction).where(scoped, Transaction.status == "rejected")) or 0
+    country_rows = db.execute(
+        select(Transaction.country_code, Transaction.country_name,
+               func.count(Transaction.id).label("transactions"))
+        .where(Transaction.organization_id == org.id, Transaction.country_code.is_not(None))
+        .group_by(Transaction.country_code, Transaction.country_name)
+        .order_by(desc(func.count(Transaction.id)), Transaction.country_name)
+    ).all()
+    countries = [{"country_code": row.country_code, "country_name": row.country_name,
+                  "transactions": row.transactions} for row in country_rows]
     return {"user": _user_json(user, org), "transactions": rows, "activity": activity,
+        "countries": countries,
         "metrics": {"total": total, "verified": verified,
                     "review_required": review_required, "rejected": rejected},
         "generated_at": datetime.now(timezone.utc).isoformat()}
@@ -342,6 +352,8 @@ def get_ui_transaction(transaction_id: str, ctx=Depends(current_user)):
     return {
         "transaction_id": tx.id,
         "invoice_number": tx.invoice_number,
+        "country_code": tx.country_code,
+        "country_name": tx.country_name,
         "status": tx.status,
         "created_at": tx.created_at.isoformat(),
         "invoice": payload.get("invoice"),
