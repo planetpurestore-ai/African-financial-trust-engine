@@ -61,6 +61,8 @@ class Transaction(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_number: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    country_code: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    country_name: Mapped[str] = mapped_column(String(100), nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="received", nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
