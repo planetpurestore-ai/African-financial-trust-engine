@@ -11,7 +11,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 3 | Organisation isolation | **Implemented in core queries; coverage needs expansion** — transaction, document, audit, and source queries are organisation-scoped. |
 | 4 | API authentication and key controls | **Partially implemented** — hashed keys, expiry, scopes, revocation and bootstrap provisioning exist; operational policy needs further review. |
 | 5 | Audit integrity | **Implemented in code; regression tests added** — hash-chain verification is being aligned with the writer and appends are serialized per organisation on PostgreSQL. |
-| 6 | Consistent error handling | **Partial** — validation and endpoint errors exist; a unified production error policy is still needed. |
+| 6 | Consistent error handling | **Partial implementation** — generic production exceptions return a safe 500 response with request ID and are logged; endpoint-specific error semantics and client guidance still need review. |
 | 7 | Automated production tests | **In progress** — production tests and CI are being repaired and expanded. |
 | 8 | Rate limiting | **Basic implementation** — fixed-window counters are stored in the shared database, with separate per-API-key and anonymous-IP limits; load testing and tuning remain. |
 | 9 | Structured application logging | **Partial implementation** — request method/path/status/duration and request ID are logged; bearer share tokens are redacted from paths. Central log shipping and alerting remain. |
@@ -90,6 +90,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Versioned downloadable Trust Record JSON export.
 - Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
 - Structured request logs with request IDs, timing, status and share-token redaction.
+- Safe generic production exception handling and expanded CORS support for API methods.
 - Database-backed fixed-window API rate limits for authenticated and anonymous requests.
 - Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
 - Admin-scoped human review queue and reasoned review decisions appended to the audit hash chain without rewriting machine outcomes.
