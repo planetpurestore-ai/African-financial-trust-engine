@@ -347,3 +347,63 @@ def test_api_key_rate_limit(monkeypatch):
     assert first.status_code == 200
     assert second.status_code == 429
     assert int(second.headers["retry-after"]) >= 1
+
+
+def test_bulk_transaction_batch_reports_per_item_idempotency_results():
+    suffix = uuid.uuid4().hex[:8]
+    org_response = client.post(
+        "/v1/organizations",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+        json={"name": f"Bulk Test {suffix}"},
+    )
+    assert org_response.status_code == 201
+    api_key = org_response.json()["api_key"]
+
+    def transaction_payload(invoice_number, amount):
+        return {
+            "invoice": {
+                "invoice_number": invoice_number,
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": amount,
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [
+                {
+                    "evidence_id": f"PO-{invoice_number}",
+                    "evidence_type": "purchase_order",
+                    "reference_number": f"PO-{invoice_number}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": amount,
+                    "currency": "USD",
+                },
+                {
+                    "evidence_id": f"PAY-{invoice_number}",
+                    "evidence_type": "payment_record",
+                    "reference_number": f"PAY-{invoice_number}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": amount,
+                    "currency": "USD",
+                },
+            ],
+        }
+
+    response = client.post(
+        "/v1/transactions/batch",
+        headers={"X-API-Key": api_key},
+        json={
+            "items": [
+                {"idempotency_key": f"bulk-{suffix}", "transaction": transaction_payload(f"BULK-{suffix}", "1000.00")},
+                {"idempotency_key": f"bulk-{suffix}", "transaction": transaction_payload(f"BULK-{suffix}-2", "2000.00")},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["successful"] == 1
+    assert response.json()["failed"] == 1
+    assert response.json()["results"][0]["status_code"] == 201
+    assert response.json()["results"][1]["status_code"] == 409
