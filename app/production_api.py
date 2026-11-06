@@ -6,7 +6,7 @@ import uuid
 from collections import Counter
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy import select, desc, text, func
@@ -815,7 +815,7 @@ def analytics_summary(
                 currency = str(invoice.get("currency") or "UNKNOWN").upper()
                 amount = Decimal(str(invoice.get("amount") or "0"))
                 amounts[currency] = amounts.get(currency, Decimal("0")) + amount
-            except (TypeError, ValueError, json.JSONDecodeError):
+            except (TypeError, ValueError, InvalidOperation, json.JSONDecodeError):
                 continue
     total = len(rows)
     review_count = status_counts.get("review_required", 0)
