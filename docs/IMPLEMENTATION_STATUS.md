@@ -88,7 +88,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Idempotency-key payload conflict detection.
 - Exact decimal preservation in invoice extraction and source-record persistence.
 - Versioned downloadable Trust Record JSON export.
-- Expiring, revocable Trust Record share links with hashed tokens and access counts.
+- Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
 - Structured request logs with request IDs, timing, status and share-token redaction.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
