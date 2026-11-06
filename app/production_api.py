@@ -173,7 +173,11 @@ def _trust_record_payload(tx: Transaction, db: Session) -> dict:
         AuditEvent.organization_id == tx.organization_id,
     ).order_by(desc(AuditEvent.id))).all()
     latest_audit = audits[0] if audits else None
-    machine_audit = next((item for item in audits if not item.decision.startswith("manual_review:")), None)
+    machine_audit = next((
+        item for item in audits
+        if not item.decision.startswith("manual_review:")
+        and item.decision != "superseded_by_resubmission"
+    ), None)
     latest_review = db.scalar(select(ReviewDecision).where(
         ReviewDecision.transaction_id == tx.id,
         ReviewDecision.organization_id == tx.organization_id,
@@ -191,6 +195,8 @@ def _trust_record_payload(tx: Transaction, db: Session) -> dict:
         "transaction_id": tx.id,
         "invoice_number": tx.invoice_number,
         "status": tx.status,
+        "revision_of": tx.revision_of,
+        "superseded_by_transaction_id": tx.superseded_by_transaction_id,
         "invoice": invoice,
         "evidence_submitted": evidence,
         "verification": json.loads(machine_audit.result_json) if machine_audit else None,
@@ -528,6 +534,64 @@ def create_transaction(
     db.commit()
     return _transaction_response(tx, db)
 
+@router.post("/transactions/{transaction_id}/resubmit", status_code=201)
+def resubmit_transaction(
+    transaction_id: str,
+    body: ProductionTransaction,
+    response: Response,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    return create_transaction(
+        body,
+        response,
+        organization,
+        db,
+        idempotency_key,
+        supersedes_transaction_id=transaction_id,
+    )
+
+
+@router.get("/transactions/{transaction_id}/revisions")
+def transaction_revision_history(
+    transaction_id: str,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    current = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == organization.id,
+    ))
+    if not current:
+        raise HTTPException(404, "Transaction not found")
+    while current.revision_of:
+        parent = db.scalar(select(Transaction).where(
+            Transaction.id == current.revision_of,
+            Transaction.organization_id == organization.id,
+        ))
+        if not parent:
+            break
+        current = parent
+    revisions = []
+    seen = set()
+    while current and current.id not in seen:
+        seen.add(current.id)
+        revisions.append({
+            "transaction_id": current.id,
+            "invoice_number": current.invoice_number,
+            "status": current.status,
+            "revision_of": current.revision_of,
+            "superseded_by_transaction_id": current.superseded_by_transaction_id,
+            "created_at": current.created_at.isoformat(),
+        })
+        current = db.scalar(select(Transaction).where(
+            Transaction.organization_id == organization.id,
+            Transaction.revision_of == current.id,
+        ).order_by(Transaction.created_at.asc()))
+    return {"count": len(revisions), "revisions": revisions}
+
+
 @router.post("/transactions/batch")
 def create_transactions_batch(
     body: BulkTransactionRequest,
@@ -578,6 +642,8 @@ def _transaction_response(tx: Transaction, db: Session):
         "transaction_id": tx.id,
         "invoice_number": tx.invoice_number,
         "status": tx.status,
+        "revision_of": tx.revision_of,
+        "superseded_by_transaction_id": tx.superseded_by_transaction_id,
         "supplier_name": invoice.get("supplier_name"),
         "buyer_name": invoice.get("buyer_name"),
         "amount": invoice.get("amount"),
@@ -731,6 +797,7 @@ def list_review_queue(
     transactions = db.scalars(select(Transaction).where(
         Transaction.organization_id == organization.id,
         Transaction.status == "review_required",
+        Transaction.superseded_by_transaction_id.is_(None),
     ).order_by(Transaction.created_at.asc()).limit(limit)).all()
     items = []
     for tx in transactions:
@@ -738,6 +805,7 @@ def list_review_queue(
             AuditEvent.transaction_id == tx.id,
             AuditEvent.organization_id == organization.id,
             ~AuditEvent.decision.startswith("manual_review:"),
+            AuditEvent.decision != "superseded_by_resubmission",
         ).order_by(desc(AuditEvent.id)))
         review = db.scalar(select(ReviewDecision).where(
             ReviewDecision.transaction_id == tx.id,
@@ -873,7 +941,10 @@ def analytics_summary(
 ):
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "from_date cannot be after to_date")
-    statement = select(Transaction).where(Transaction.organization_id == organization.id)
+    statement = select(Transaction).where(
+        Transaction.organization_id == organization.id,
+        Transaction.superseded_by_transaction_id.is_(None),
+    )
     if from_date:
         statement = statement.where(Transaction.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc))
     if to_date:
