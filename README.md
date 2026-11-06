@@ -91,6 +91,14 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 The raw token is shown only once. Treat it as a bearer credential. Shared records are read-only and are not evidence of provider-authoritative verification.
 
+### Human review workflow
+
+- `GET /v1/reviews` lists organisation-scoped transactions awaiting human review.
+- `GET /v1/reviews/{transaction_id}` returns the review decision history.
+- `POST /v1/reviews/{transaction_id}/decision` records either `accepted_for_further_processing` or `rejected`, with a mandatory reason.
+
+These routes require an API key with `bank-grade:admin`. A human disposition is stored separately and appended to the audit hash chain; it does not change the machine verification status or convert a `review_required` result into a machine-verified result.
+
 ### Institution risk settings
 
 `GET /v1/risk-settings` and `PUT /v1/risk-settings` are restricted to API keys provisioned with `bank-grade:admin`. Policies are stored per organisation and can configure whether commercial/payment evidence is required, whether duplicate invoices/payment mismatches/counterparty conflicts are rejected, and an amount threshold that forces manual review. Defaults require both commercial and payment evidence and reject duplicate/conflicting records. Policy changes should be controlled by the institution's own approval process.
