@@ -86,12 +86,22 @@ def extract_fields(text: str) -> dict:
     confidence = {k: (1.0 if v else 0.0) for k, v in fields.items()}
     required = ("invoice_number", "supplier_name", "buyer_name", "amount", "currency")
     missing_required = [k for k in required if not fields[k]]
+    arithmetic_consistent = None
+    review_reasons = [f"missing_required_field:{name}" for name in missing_required]
+    if subtotal is not None and tax_amount is not None and amount is not None:
+        arithmetic_consistent = (
+            Decimal(subtotal) + Decimal(tax_amount) == Decimal(amount)
+        )
+        if not arithmetic_consistent:
+            review_reasons.append("subtotal_tax_total_mismatch")
     return {
         **fields,
         "fields": fields,
         "confidence": confidence,
         "confidence_basis": "field_presence_only; not an OCR/model truth probability",
-        "requires_review": bool(missing_required),
+        "arithmetic_consistent": arithmetic_consistent,
+        "requires_review": bool(review_reasons),
+        "review_reasons": review_reasons,
         "missing_required_fields": missing_required,
         "text_length": len(text),
     }
