@@ -38,10 +38,10 @@ This register distinguishes code that exists from capabilities that have been in
 
 | # | Improvement | Current assessment |
 |---:|---|---|
-| 23 | Simplified SME submission | **Partial** — document and transaction intake APIs exist; a complete guided SME onboarding/submission flow remains. |
+| 23 | Simplified SME submission | **Partial implementation** — the operational dashboard supports document selection, multi-file upload, extraction feedback and transaction/evidence entry; guided onboarding and correction flows remain. |
 | 24 | Multiple-document upload | **Basic implementation** — batch endpoint accepts up to ten files and reports per-file success/failure; overall request size remains capped. |
 | 25 | Document categorisation | **Basic implementation** — rule-based invoice, PO, contract, payment-record and delivery-note suggestions are persisted and returned; user override and classifier accuracy testing remain. |
-| 26 | Upload progress indicators | **Not independently verified** — requires browser-level UX testing and implementation if absent. |
+| 26 | Upload progress indicators | **Basic implementation** — dashboard uses upload progress events and per-file batch outcomes; device/network UX testing remains. |
 | 27 | Verification status tracking | **Basic implementation** — transaction status is stored and returned. |
 | 28 | Downloadable Trust Record | **Basic implementation** — a versioned JSON export includes submitted evidence, verification, audit hashes and limitations; PDF signing and external verification remain. |
 | 29 | Transaction history | **Implemented at API level** — organisation-scoped transaction listing exists. |
