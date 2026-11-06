@@ -91,6 +91,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 The raw token is shown only once. Treat it as a bearer credential. Shared records are read-only and are not evidence of provider-authoritative verification.
 
+### Correct and resubmit a transaction
+
+`POST /v1/transactions/{transaction_id}/resubmit` accepts a corrected invoice/evidence payload and requires a new `Idempotency-Key`. Only review-required or rejected records can be superseded, and the invoice number must remain the same. The original transaction remains in history; the replacement links to it through `revision_of`. `GET /v1/transactions/{transaction_id}/revisions` returns the full revision chain. Supersession is appended to the audit hash chain and does not erase the original machine result or human review history.
+
 ### Organisation analytics
 
 `GET /v1/analytics/summary` returns transaction counts by status, review rate, submitted invoice totals by currency and the most common failed checks. Optional `from_date` and `to_date` filters use UTC transaction creation dates. Amount totals represent submitted invoice values, not collected cash, revenue, receivables balances or lending exposure.
