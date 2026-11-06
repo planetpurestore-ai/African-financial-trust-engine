@@ -46,22 +46,22 @@ def inspect_document_integrity(data: bytes, content_type: str) -> dict:
     if content_type == "application/pdf":
         if data.count(b"%%EOF") > 1:
             signals.append("multiple_pdf_revision_markers")
-        if re.search(rb"/(?:JavaScript|JS)\\b", data):
+        if re.search(rb"/(?:JavaScript|JS)\b", data):
             signals.append("pdf_embedded_script")
         if b"/EmbeddedFiles" in data:
             signals.append("pdf_embedded_files")
-        if b"/OpenAction" in data or re.search(rb"/AA\\b", data):
+        if b"/OpenAction" in data or re.search(rb"/AA\b", data):
             signals.append("pdf_active_action")
         if b"/Encrypt" in data:
             signals.append("pdf_encrypted_document")
         if b"/ByteRange" in data and b"/Contents" in data:
             signals.append("pdf_signature_field_present_but_not_cryptographically_verified")
     elif content_type.startswith("text/"):
-        if b"\\x00" in data:
+        if bytes([0]) in data:
             signals.append("text_contains_null_bytes")
         try:
             decoded = data.decode("utf-8")
-            if any("\\u202a" <= char <= "\\u202e" or "\\u2066" <= char <= "\\u2069" for char in decoded):
+            if any(0x202A <= ord(char) <= 0x202E or 0x2066 <= ord(char) <= 0x2069 for char in decoded):
                 signals.append("text_contains_bidirectional_override_controls")
         except UnicodeDecodeError:
             signals.append("text_encoding_is_not_utf8")
