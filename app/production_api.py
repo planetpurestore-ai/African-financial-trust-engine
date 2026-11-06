@@ -14,7 +14,7 @@ from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence_set
 from app.risk_engine import assess, DEFAULT_RISK_SETTINGS
 from app.production_db import SessionLocal, Organization, OrganizationRiskSettings, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
-from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields, inspect_document_integrity
+from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields, inspect_document_integrity, classify_document
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
 
 router = APIRouter(prefix="/v1", tags=["production"])
@@ -252,8 +252,10 @@ async def upload_document(file: UploadFile = File(...), organization: Organizati
         if old.get("ocr_provider"):
             refreshed["ocr_provider"] = old["ocr_provider"]
         existing.extraction_json = json.dumps(refreshed, sort_keys=True)
+        if existing.category == "other":
+            existing.category = classify_document(filename, existing.text or "")
         db.commit()
-        return {"document_id": existing.id, "duplicate": True, "refreshed": True, "sha256": digest, "extraction": refreshed}
+        return {"document_id": existing.id, "duplicate": True, "refreshed": True, "sha256": digest, "category": existing.category, "extraction": refreshed}
 
     if is_pdf:
         try:
@@ -288,9 +290,10 @@ async def upload_document(file: UploadFile = File(...), organization: Organizati
         )
 
     doc_id = uuid.uuid4().hex
-    db.add(Document(id=doc_id, organization_id=organization.id, filename=filename, content_type=content_type, sha256=digest, text=text, extraction_json=json.dumps(extraction, sort_keys=True)))
+    category = classify_document(filename, text)
+    db.add(Document(id=doc_id, organization_id=organization.id, filename=filename, content_type=content_type, category=category, sha256=digest, text=text, extraction_json=json.dumps(extraction, sort_keys=True)))
     db.commit()
-    return {"document_id": doc_id, "duplicate": False, "sha256": digest, "filename": filename, "extraction": extraction}
+    return {"document_id": doc_id, "duplicate": False, "sha256": digest, "filename": filename, "category": category, "extraction": extraction}
 
 @router.post("/documents/batch")
 async def upload_documents_batch(
@@ -324,7 +327,7 @@ async def upload_documents_batch(
 @router.get("/documents")
 def list_documents(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
     limit = max(1, min(limit, 100)); rows = db.scalars(select(Document).where(Document.organization_id == organization.id).order_by(desc(Document.created_at)).limit(limit)).all()
-    return {"count": len(rows), "documents": [{"document_id": d.id, "filename": d.filename, "content_type": d.content_type, "sha256": d.sha256, "extraction": json.loads(d.extraction_json), "created_at": d.created_at.isoformat()} for d in rows]}
+    return {"count": len(rows), "documents": [{"document_id": d.id, "filename": d.filename, "content_type": d.content_type, "category": d.category, "sha256": d.sha256, "extraction": json.loads(d.extraction_json), "created_at": d.created_at.isoformat()} for d in rows]}
 
 @router.post("/integrations/{provider}", status_code=201)
 def create_integration(provider: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
