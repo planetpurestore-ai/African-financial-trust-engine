@@ -177,7 +177,7 @@ def verify_audit_chain(db: Session, organization_id: int) -> dict[str, Any]:
     previous = "0" * 64
     failures = []
     for row in rows:
-        canonical = f"{previous}|{row['transaction_id']}|{row['decision']}|{row['score']}|{row['result_json']}"
+        canonical = f"{previous}|{row['transaction_id']}|{row['decision']}|{float(row['score'])}|{row['result_json']}"
         expected = hashlib.sha256(canonical.encode()).hexdigest()
         if row["previous_hash"] != previous or not hmac.compare_digest(row["event_hash"], expected):
             failures.append(row["id"])
