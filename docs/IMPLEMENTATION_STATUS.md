@@ -15,7 +15,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 7 | Automated production tests | **CI-tested** — 55 automated tests passed on the latest validated code commit; the suite includes production API, security, review, resubmission, analytics and idempotency paths. |
 | 8 | Rate limiting | **Basic implementation** — fixed-window counters are stored in the shared database, with separate per-API-key and anonymous-IP limits; load testing and tuning remain. |
 | 9 | Structured application logging | **Partial implementation** — request method/path/status/duration and request ID are logged; bearer share tokens are redacted from paths. Central log shipping and alerting remain. |
-| 10 | Health monitoring | **Basic implementation** — database health endpoint and container health check exist; external uptime/alerting is not configured. |
+| 10 | Health monitoring | **Basic implementation; live check failing** — database health endpoint and container health check exist, but CI's latest request to the public Render `/health` endpoint timed out after 30 seconds with zero bytes; external uptime/alerting is not configured. |
 
 ## Verification engine
 
@@ -109,4 +109,4 @@ The working branch `aft/production-hardening-2026-11` contains:
 
 External provider prerequisites and source-authority requirements are documented in `docs/EXTERNAL_INTEGRATION_READINESS.md`.
 
-This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
+This branch is not yet merged or deployed. The public Render health endpoint timed out on 6 November 2026 (30 seconds, zero bytes received). The Render service and its logs must be inspected before any deployment attempt. Passing automated tests is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
