@@ -17,7 +17,7 @@ from app.financial_sources_api import router as financial_sources_router
 app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.1", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
 if origins:
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key"])
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key", "X-Request-ID"])
 app.middleware("http")(request_size_guard)
 app.middleware("http")(bank_grade_security)
 app.include_router(system_router)
