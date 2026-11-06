@@ -88,6 +88,7 @@ class Document(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
