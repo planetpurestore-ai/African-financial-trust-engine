@@ -21,6 +21,8 @@ def _required_scope(path: str, method: str):
         return None
     if path.startswith("/v1/bank-grade/controls") or path.startswith("/v1/risk-settings") or path.startswith("/v1/reviews"):
         return "bank-grade:admin"
+    if path.startswith("/v1/analytics"):
+        return "bank-grade:read"
     if path.startswith("/v1/bank-grade"):
         return "bank-grade:read" if method in {"GET", "HEAD", "OPTIONS"} else "bank-grade:write"
     if path.startswith("/v1/audits") or "/audits/" in path:
