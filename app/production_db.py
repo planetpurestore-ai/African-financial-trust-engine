@@ -96,6 +96,13 @@ class IntegrationCredential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "provider", name="uq_integration_credential"),)
 
+class ApiRateLimit(Base):
+    __tablename__ = "api_rate_limits"
+    bucket_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    window_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class IntegrationEvent(Base):
     __tablename__ = "integration_events"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
