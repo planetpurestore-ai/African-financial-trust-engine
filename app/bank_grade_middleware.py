@@ -19,7 +19,7 @@ def _hash_key(value: str) -> str:
 def _required_scope(path: str, method: str):
     if path.startswith("/v1/organizations") or path.endswith("/webhook"):
         return None
-    if path.startswith("/v1/bank-grade/controls"):
+    if path.startswith("/v1/bank-grade/controls") or path.startswith("/v1/risk-settings"):
         return "bank-grade:admin"
     if path.startswith("/v1/bank-grade"):
         return "bank-grade:read" if method in {"GET", "HEAD", "OPTIONS"} else "bank-grade:write"
