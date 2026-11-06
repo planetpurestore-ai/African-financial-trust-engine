@@ -124,10 +124,54 @@ def _aggregate(
     }
 
 
+def _apply_reference_checks(result: dict, invoice: Invoice, evidence_items: list[Evidence]) -> dict:
+    reference_rules = (
+        ("purchase_order_number", "purchase_order"),
+        ("contract_reference", "contract"),
+        ("delivery_reference", "delivery_note"),
+    )
+    reference_checks = {}
+    for invoice_field, evidence_type in reference_rules:
+        expected = getattr(invoice, invoice_field, None)
+        if not expected:
+            continue
+        matches = [
+            item.evidence_id
+            for item in evidence_items
+            if item.evidence_type == evidence_type
+            and _normalize_text(item.reference_number) == _normalize_text(expected)
+        ]
+        matched = bool(matches)
+        check_name = f"{invoice_field}_match"
+        result["checks"][check_name] = matched
+        result["supporting_evidence"][check_name] = matches
+        result["total_checks"] += 1
+        if matched:
+            result["passed_checks"] += 1
+        else:
+            result["failed_checks"].append(check_name)
+            result["verification_score"] = round(max(0.0, result["verification_score"] - 10.0), 2)
+            result["status"] = "review_required"
+        reference_checks[invoice_field] = {
+            "expected_reference": expected,
+            "evidence_type": evidence_type,
+            "matched": matched,
+            "matching_evidence_ids": matches,
+        }
+    result["reference_checks"] = reference_checks
+    return result
+
+
 def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence, policy: dict | None = None) -> dict:
-    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)}, [evidence], policy)
+    result = _aggregate(
+        {evidence.evidence_id: _checks_for_evidence(invoice, evidence)},
+        [evidence],
+        policy,
+    )
+    return _apply_reference_checks(result, invoice, [evidence])
 
 
 def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence], policy: dict | None = None) -> dict:
     checks_by_evidence = {item.evidence_id: _checks_for_evidence(invoice, item) for item in evidence_items}
-    return _aggregate(checks_by_evidence, evidence_items, policy)
+    result = _aggregate(checks_by_evidence, evidence_items, policy)
+    return _apply_reference_checks(result, invoice, evidence_items)
