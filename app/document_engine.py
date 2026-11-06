@@ -46,8 +46,8 @@ def extract_fields(text: str) -> dict:
     buyer_name = _first([r"(?:buyer|customer|bill\s*to)\s*[:=]\s*([^\n\r]+)", r"(?:to)\s*[:=]\s*([^\n\r]+)"], text)
     currency = _first([r"\b(USD|EUR|GBP|RWF|KES|UGX|TZS|ZAR|GHS|NGN|XOF|XAF)\b"], compact)
     amount_raw = _first([
-        r"(?:total\s*(?:due)?|amount\s*due|invoice\s*total)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
-        r"(?:amount)\s*[:=]\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+        r"^\s*(?:invoice\s+total|total(?:\s+due)?|amount\s+due)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+        r"^\s*amount\s*[:=]\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
     ], compact)
     def money_string(raw):
         if not raw:
