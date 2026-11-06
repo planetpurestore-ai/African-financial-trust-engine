@@ -39,3 +39,9 @@ jobs:
         run: |
           alembic heads
           alembic history | head -n 5
+
+      - name: Apply all migrations to a clean SQLite database
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          DATABASE_URL: sqlite:///./migration-check.db
+        run: alembic upgrade head
