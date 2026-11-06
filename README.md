@@ -76,6 +76,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 `GET /audits/{invoice_number}?limit=50`
 
+### Download a Trust Record
+
+`GET /v1/transactions/{transaction_id}/trust-record` returns a versioned JSON export containing the submitted invoice/evidence, verification result, audit hashes and limitations.
+
 ### Production financial-source evidence
 
 `POST /v1/sources/records` stores customer-submitted financial-source records as `unverified`. Customer-supplied provenance cannot promote a record to independently verified. Use `GET /v1/sources/records` to retrieve stored records and `GET /v1/sources/reconcile/{transaction_id}` for decision-support comparisons. A live provider adapter must establish authority separately.
