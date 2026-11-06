@@ -1,7 +1,8 @@
 from pathlib import Path
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy import text
 from app.production_db import SessionLocal
 from app.production_api import router
@@ -26,6 +27,20 @@ app.include_router(setup_router)
 app.include_router(bank_grade_router)
 app.include_router(controls_router)
 app.include_router(financial_sources_router)
+
+
+@app.exception_handler(Exception)
+async def production_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None)
+    logging.getLogger("aft.application").exception(
+        "unhandled_application_error",
+        extra={"request_id": request_id, "http_method": request.method, "http_path": request.url.path},
+    )
+    body = {"detail": "Internal server error"}
+    if request_id:
+        body["request_id"] = request_id
+    headers = {"X-Request-ID": request_id} if request_id else None
+    return JSONResponse(status_code=500, content=body, headers=headers)
 
 DASHBOARD = Path(__file__).with_name("dashboard_operational.html")
 LEGACY_DASHBOARD = Path(__file__).with_name("dashboard_v2.html")
