@@ -55,6 +55,7 @@ def test_production_transaction_round_trip(caplog):
     )
     assert document.status_code == 201
     assert document.json()["duplicate"] is False
+    assert document.json()["category"] == "invoice"
 
     batch = client.post(
         "/v1/documents/batch",
