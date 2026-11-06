@@ -39,7 +39,7 @@ This register distinguishes code that exists from capabilities that have been in
 | # | Improvement | Current assessment |
 |---:|---|---|
 | 23 | Simplified SME submission | **Partial** — document and transaction intake APIs exist; a complete guided SME onboarding/submission flow remains. |
-| 24 | Multiple-document upload | **Not implemented as a batch flow** — the API accepts one file per upload request. |
+| 24 | Multiple-document upload | **Basic implementation** — batch endpoint accepts up to ten files and reports per-file success/failure; overall request size remains capped. |
 | 25 | Document categorisation | **Partial** — extraction exists; persistent user-controlled document categories and classification workflow remain. |
 | 26 | Upload progress indicators | **Not independently verified** — requires browser-level UX testing and implementation if absent. |
 | 27 | Verification status tracking | **Basic implementation** — transaction status is stored and returned. |
@@ -91,6 +91,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
 - Structured request logs with request IDs, timing, status and share-token redaction.
 - Database-backed fixed-window API rate limits for authenticated and anonymous requests.
+- Multi-document upload endpoint with per-file partial-success reporting.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
