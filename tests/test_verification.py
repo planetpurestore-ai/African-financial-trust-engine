@@ -96,3 +96,23 @@ def test_conflicting_evidence_is_penalized():
     assert result["status"] == "review_required"
     assert result["verification_score"] == 70.0
     assert "amount_match" in result["conflicts"]
+
+
+def test_delivery_note_is_reported_as_delivery_evidence_not_payment():
+    delivery = Evidence(
+        evidence_id="DEL-001",
+        evidence_type="delivery_note",
+        reference_number="DEL-001",
+        supplier_name="Supplier Ltd",
+        buyer_name="Buyer Ltd",
+        amount=Decimal("10000.00"),
+        currency="USD",
+        evidence_date=date(2026, 1, 12),
+    )
+    result = compare_invoice_to_evidence_set(
+        make_invoice(),
+        [make_po(), delivery],
+        policy={"require_commercial_evidence": True, "require_payment_evidence": False},
+    )
+    assert result["delivery_evidence_present"] is True
+    assert result["payment_evidence_present"] is False
