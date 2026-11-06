@@ -155,7 +155,7 @@ The repository contains a functional engineering MVP and a separate production-h
 
 The engine is not yet production-certified financial infrastructure. It has no live bank, mobile-money, PSP, accounting, ERP, registry, tax-authority or logistics provider connections. Its rule score is not a calibrated probability, and it does not make lending or credit decisions. Document anomaly signals are not proof of authenticity.
 
-External provider prerequisites and source-authority rules are documented in [docs/EXTERNAL_INTEGRATION_READINESS.md](docs/EXTERNAL_INTEGRATION_READINESS.md). The full 50-point implementation register is in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+Institutional API onboarding and integration examples are documented in [docs/INSTITUTIONAL_API_GUIDE.md](docs/INSTITUTIONAL_API_GUIDE.md). External provider prerequisites and source-authority rules are documented in [docs/EXTERNAL_INTEGRATION_READINESS.md](docs/EXTERNAL_INTEGRATION_READINESS.md). The full 50-point implementation register is in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Vision
 
