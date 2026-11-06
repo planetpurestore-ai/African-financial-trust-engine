@@ -26,9 +26,9 @@ This register distinguishes code that exists from capabilities that have been in
 | 13 | Duplicate invoice detection | **Basic implementation** — duplicate invoice numbers are flagged within an organisation; cross-source/fuzzy duplicate detection remains. |
 | 14 | Mathematical validation | **Partial implementation** — exact-decimal subtotal + tax = invoice total validation is available when those fields are supplied/extracted; line-item, discount, withholding and multi-currency tax rules remain. |
 | 15 | Supplier/buyer consistency | **Implemented for supplied evidence** — populated party names are compared and conflicting values require review. |
-| 16 | Purchase-order matching | **Partial** — PO evidence can support the invoice checks; line-item, quantity and delivery matching remain. |
-| 17 | Contract matching | **Partial** — contract evidence is accepted as commercial evidence; clause/term-level matching remains. |
-| 18 | Delivery evidence matching | **Partial intake support** — delivery-note evidence can be submitted, categorised and reported separately; matching delivery references, quantities, dates and carrier confirmations is not yet implemented. |
+| 16 | Purchase-order matching | **Improved partial implementation** — an invoice-declared PO number is matched against PO evidence references, with explicit supporting IDs and a failed check on mismatch; line-item and quantity matching remain. |
+| 17 | Contract matching | **Improved partial implementation** — an invoice-declared contract reference must match a contract evidence reference; clause, term and obligation matching remain. |
+| 18 | Delivery evidence matching | **Improved partial implementation** — an invoice-declared delivery reference must match a delivery-note evidence reference; quantities, shipment events, dates and carrier confirmations remain. |
 | 19 | Confidence levels | **Partial** — a deterministic score is returned; it is not a calibrated probability and should not be presented as one. |
 | 20 | Institution-configurable risk rules | **Basic implementation** — organisation-scoped policies configure evidence requirements, duplicate/conflict decisions and an amount threshold; more granular, versioned rule builders remain. |
 | 21 | Explainability | **Implemented at MVP level** — checks, failed checks, conflicts and supporting evidence are returned. |
