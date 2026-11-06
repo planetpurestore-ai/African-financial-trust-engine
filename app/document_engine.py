@@ -64,7 +64,7 @@ def extract_fields(text: str) -> dict:
         r"(?:sub\s*total|subtotal)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
     ], compact)
     tax_raw = _first([
-        r"(?:tax(?:\s*amount)?|vat(?:\s*amount)?)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+        r"(?:tax\s*amount|vat\s*amount|total\s*tax|total\s*vat)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
     ], compact)
     subtotal = money_string(subtotal_raw)
     tax_amount = money_string(tax_raw)
