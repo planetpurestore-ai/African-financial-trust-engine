@@ -1,6 +1,6 @@
-import hashlib, hmac, os, json, uuid
+import hashlib, hmac, os, json, uuid, secrets
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/v1/bank-grade/controls", tags=["bank-grade-controls"
 
 class KeyPolicy(BaseModel):
     expires_in_days: int | None = Field(default=None, ge=1, le=3650)
-    scopes: list[str] = Field(default_factory=lambda: ["transactions:read","transactions:write","documents:read","documents:write","integrations:read","integrations:write","audits:read","bank-grade:admin"], max_length=30)
+    scopes: list[str] = Field(default_factory=lambda: ["transactions:read","transactions:write","documents:read","documents:write","integrations:read","integrations:write","audits:read","bank-grade:read"], max_length=30)
 
 
 def db_session():
@@ -29,6 +29,45 @@ def hash_key(value):
     pepper = os.getenv("API_KEY_PEPPER")
     if not pepper: raise RuntimeError("API_KEY_PEPPER is required")
     return hashlib.sha256((pepper + value).encode()).hexdigest()
+
+@router.post("/bootstrap/{key_id}")
+def bootstrap_admin_key(
+    key_id: int,
+    x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"),
+    db: Session = Depends(db_session),
+):
+    """Provision the first administrative API key using the deployment secret.
+
+    This avoids an admin-scope deadlock: ordinary keys cannot grant themselves
+    admin privileges, while an operator with the deployment bootstrap secret
+    can explicitly provision one existing key.
+    """
+    expected = os.getenv("BOOTSTRAP_TOKEN")
+    if not expected or not x_bootstrap_token or not secrets.compare_digest(x_bootstrap_token, expected):
+        raise HTTPException(403, "Bootstrap authorization required")
+    ensure(db)
+    key = db.execute(
+        text("SELECT key_hash, organization_id, active FROM api_keys WHERE id=:i"),
+        {"i": key_id},
+    ).mappings().first()
+    if not key or not key["active"]:
+        raise HTTPException(404, "Active API key not found")
+    scopes = [
+        "transactions:read", "transactions:write",
+        "documents:read", "documents:write",
+        "integrations:read", "integrations:write",
+        "audits:read", "bank-grade:read", "bank-grade:write",
+        "bank-grade:admin",
+    ]
+    db.execute(
+        text("""INSERT INTO api_key_policies(key_hash,organization_id,scopes,revoked)
+        VALUES (:h,:o,:s,0)
+        ON CONFLICT(key_hash) DO UPDATE SET organization_id=:o, scopes=:s, revoked=0"""),
+        {"h": key["key_hash"], "o": key["organization_id"], "s": ",".join(scopes)},
+    )
+    db.commit()
+    return {"key_id": key_id, "organization_id": key["organization_id"], "scopes": scopes, "revoked": False}
+
 
 @router.post("/keys/{key_id}/policy")
 def set_key_policy(key_id: int, body: KeyPolicy, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
