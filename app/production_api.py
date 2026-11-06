@@ -205,6 +205,10 @@ def list_integration_events(organization: Organization = Depends(require_api_key
 
 @router.post("/transactions", status_code=201)
 def create_transaction(body: ProductionTransaction, response: Response, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    # Serialize transaction intake per organization on PostgreSQL. This makes
+    # idempotency checks, duplicate detection, and audit-chain append atomic
+    # with respect to other requests for the same organization.
+    db.execute(select(Organization).where(Organization.id == organization.id).with_for_update()).scalar_one()
     normalized_payload = body.model_dump(mode="json")
     if idempotency_key:
         if len(idempotency_key) > 255 or not idempotency_key.strip():
