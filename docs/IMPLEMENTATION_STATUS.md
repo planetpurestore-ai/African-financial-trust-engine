@@ -30,7 +30,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 17 | Contract matching | **Partial** — contract evidence is accepted as commercial evidence; clause/term-level matching remains. |
 | 18 | Delivery evidence matching | **Not implemented** — delivery notes, proof of delivery and logistics events are not integrated into verification. |
 | 19 | Confidence levels | **Partial** — a deterministic score is returned; it is not a calibrated probability and should not be presented as one. |
-| 20 | Institution-configurable risk rules | **Not implemented** — current risk rules are code-defined, not institution-managed. |
+| 20 | Institution-configurable risk rules | **Basic implementation** — organisation-scoped policies configure evidence requirements, duplicate/conflict decisions and an amount threshold; more granular, versioned rule builders remain. |
 | 21 | Explainability | **Implemented at MVP level** — checks, failed checks, conflicts and supporting evidence are returned. |
 | 22 | Human review workflow | **Partial** — review-required decisions and review UI elements exist; assignment, reviewer actions and decision history need completion. |
 
@@ -55,7 +55,7 @@ This register distinguishes code that exists from capabilities that have been in
 |---:|---|---|
 | 33 | Institutional dashboard | **Partial** — dashboard variants exist; role-based, institution-ready workflows need validation. |
 | 34 | Reviewer permissions | **Not implemented end-to-end** — API key scopes are not a substitute for named reviewer roles. |
-| 35 | Institution-specific risk settings | **Not implemented** — no institution-managed ruleset/versioning workflow. |
+| 35 | Institution-specific risk settings | **Basic implementation** — admin-only GET/PUT settings are persisted per organisation; reviewer roles, version history and maker-checker approval remain. |
 | 36 | API integration documentation | **Partial** — OpenAPI docs and API documentation exist; partner onboarding guides and examples need completion. |
 | 37 | API sandbox | **Not implemented** — a separate isolated sandbox environment and test data are required. |
 | 38 | Webhook notifications | **Partial** — signed inbound webhook intake and event deduplication exist; outbound notifications and retry handling remain. |
@@ -91,6 +91,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
 - Structured request logs with request IDs, timing, status and share-token redaction.
 - Database-backed fixed-window API rate limits for authenticated and anonymous requests.
+- Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
 - Multi-document upload endpoint with per-file partial-success reporting.
 - Exact-decimal subtotal/tax/total validation and extraction fields.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
