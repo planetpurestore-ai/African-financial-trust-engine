@@ -85,34 +85,80 @@ def list_keys(organization: Organization = Depends(require_api_key), db: Session
     return {"keys": [{"id": k.id, "label": k.label, "active": bool(k.active), "created_at": k.created_at.isoformat()} for k in rows]}
 
 @router.post("/documents", status_code=201)
-def upload_document(file: UploadFile = File(...), organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
-    data = file.file.read()
-    if not data: raise HTTPException(422, "Empty document")
-    if len(data) > 10 * 1024 * 1024: raise HTTPException(413, "Document exceeds 10MB limit")
+async def upload_document(file: UploadFile = File(...), organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
+    # Read at most one byte beyond the limit. Checking size after an unbounded
+    # read allows a large upload to exhaust worker memory before it is rejected.
+    max_bytes = 10 * 1024 * 1024
+    data = await file.read(max_bytes + 1)
+    if not data:
+        raise HTTPException(422, "Empty document")
+    if len(data) > max_bytes:
+        raise HTTPException(413, "Document exceeds 10MB limit")
+
+    content_type = (file.content_type or "application/octet-stream").lower().split(";", 1)[0].strip()
+    filename = (file.filename or "document")[:255]
+    is_pdf = data.startswith(b"%PDF-")
+    is_png = data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    is_jpeg = data.startswith(b"\\xff\\xd8\\xff")
+    is_gif = data.startswith((b"GIF87a", b"GIF89a"))
+    is_webp = len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+
+    if content_type == "application/pdf" or filename.lower().endswith(".pdf"):
+        if not is_pdf:
+            raise HTTPException(415, "File content does not match PDF type")
+    elif content_type.startswith("image/"):
+        supported_image = (
+            (content_type == "image/png" and is_png)
+            or (content_type in {"image/jpeg", "image/jpg"} and is_jpeg)
+            or (content_type == "image/gif" and is_gif)
+            or (content_type == "image/webp" and is_webp)
+        )
+        if not supported_image:
+            raise HTTPException(415, "Unsupported or mismatched image type; use PNG, JPEG, GIF, or WebP")
+    elif not (content_type.startswith("text/") or filename.lower().endswith((".txt", ".csv"))):
+        raise HTTPException(415, "Supported document types: PDF, PNG/JPEG/GIF/WebP images, and text/CSV")
+
     digest = sha256_bytes(data)
     existing = db.scalar(select(Document).where(Document.organization_id == organization.id, Document.sha256 == digest))
     if existing:
         refreshed = extract_fields(existing.text or "")
         old = json.loads(existing.extraction_json or "{}")
-        if old.get("method"): refreshed["method"] = old["method"]
-        if old.get("ocr_provider"): refreshed["ocr_provider"] = old["ocr_provider"]
-        existing.extraction_json = json.dumps(refreshed, sort_keys=True); db.commit()
+        if old.get("method"):
+            refreshed["method"] = old["method"]
+        if old.get("ocr_provider"):
+            refreshed["ocr_provider"] = old["ocr_provider"]
+        existing.extraction_json = json.dumps(refreshed, sort_keys=True)
+        db.commit()
         return {"document_id": existing.id, "duplicate": True, "refreshed": True, "sha256": digest, "extraction": refreshed}
-    content_type = file.content_type or "application/octet-stream"
-    if content_type == "application/pdf" or (file.filename or "").lower().endswith(".pdf"):
+
+    if is_pdf:
         try:
-            text = extract_pdf_text(data); extraction = extract_fields(text); extraction["method"] = "pdf_text"
-        except Exception as exc: raise HTTPException(422, f"PDF extraction failed: {type(exc).__name__}")
+            text = extract_pdf_text(data)
+            extraction = extract_fields(text)
+            extraction["method"] = "pdf_text"
+        except Exception as exc:
+            raise HTTPException(422, f"PDF extraction failed: {type(exc).__name__}")
     elif content_type.startswith("image/"):
         try:
-            ocr = image_ocr(data, content_type); text = ocr["text"]; extraction = extract_fields(text); extraction["method"] = "ocr"; extraction["ocr_provider"] = ocr["provider"]
-        except OCRProviderError as exc: raise HTTPException(503, str(exc))
-    elif content_type.startswith("text/") or (file.filename or "").lower().endswith((".txt", ".csv")):
-        text = data.decode("utf-8", errors="replace"); extraction = extract_fields(text); extraction["method"] = "text"
-    else: raise HTTPException(415, "Supported document types: PDF, images, and text/CSV")
+            ocr = image_ocr(data, content_type)
+            text = ocr["text"]
+            extraction = extract_fields(text)
+            extraction["method"] = "ocr"
+            extraction["ocr_provider"] = ocr["provider"]
+        except OCRProviderError as exc:
+            raise HTTPException(503, str(exc))
+    else:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            raise HTTPException(415, "Text documents must use UTF-8 encoding")
+        extraction = extract_fields(text)
+        extraction["method"] = "text"
+
     doc_id = uuid.uuid4().hex
-    db.add(Document(id=doc_id, organization_id=organization.id, filename=(file.filename or "document")[:255], content_type=content_type, sha256=digest, text=text, extraction_json=json.dumps(extraction, sort_keys=True))); db.commit()
-    return {"document_id": doc_id, "duplicate": False, "sha256": digest, "filename": file.filename, "extraction": extraction}
+    db.add(Document(id=doc_id, organization_id=organization.id, filename=filename, content_type=content_type, sha256=digest, text=text, extraction_json=json.dumps(extraction, sort_keys=True)))
+    db.commit()
+    return {"document_id": doc_id, "duplicate": False, "sha256": digest, "filename": filename, "extraction": extraction}
 
 @router.get("/documents")
 def list_documents(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
