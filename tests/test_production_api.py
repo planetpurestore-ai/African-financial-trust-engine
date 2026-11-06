@@ -298,6 +298,60 @@ def test_production_transaction_round_trip(caplog):
         headers={"X-API-Key": api_key},
     )
     assert reviewed_record.json()["human_review"]["decision"] == "accepted_for_further_processing"
+
+    resubmitted = client.post(
+        f"/v1/transactions/{review_tx_id}/resubmit",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"resubmit-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": f"REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [
+                {
+                    "evidence_id": f"PO-REVIEW-{suffix}",
+                    "evidence_type": "purchase_order",
+                    "reference_number": f"PO-REVIEW-{suffix}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": "4200.00",
+                    "currency": "USD",
+                },
+                {
+                    "evidence_id": f"PAY-REVIEW-{suffix}",
+                    "evidence_type": "payment_record",
+                    "reference_number": f"PAY-REVIEW-{suffix}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": "4200.00",
+                    "currency": "USD",
+                },
+            ],
+        },
+    )
+    assert resubmitted.status_code == 201
+    replacement_id = resubmitted.json()["transaction_id"]
+    assert resubmitted.json()["status"] == "verified"
+    assert resubmitted.json()["revision_of"] == review_tx_id
+    original_after_resubmit = client.get(
+        f"/v1/transactions/{review_tx_id}",
+        headers={"X-API-Key": api_key},
+    )
+    assert original_after_resubmit.json()["superseded_by_transaction_id"] == replacement_id
+    revision_history = client.get(
+        f"/v1/transactions/{review_tx_id}/revisions",
+        headers={"X-API-Key": api_key},
+    )
+    assert revision_history.status_code == 200
+    assert revision_history.json()["count"] == 2
+    active_review_queue = client.get("/v1/reviews", headers={"X-API-Key": api_key})
+    assert all(item["transaction_id"] != review_tx_id for item in active_review_queue.json()["reviews"])
+
     reviewed_chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
     assert reviewed_chain.status_code == 200
     assert reviewed_chain.json()["valid"] is True
