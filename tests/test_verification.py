@@ -76,7 +76,7 @@ def test_missing_evidence_fields_score_zero_and_require_review():
     result = compare_invoice_to_evidence(make_invoice(), evidence)
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 20.0
+    assert result["verification_score"] == 0.0
     assert len([x for x in result["failed_checks"] if x.startswith("missing_")]) == 1
 
 
