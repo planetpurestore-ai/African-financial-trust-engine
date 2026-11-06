@@ -91,6 +91,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 The raw token is shown only once. Treat it as a bearer credential. Shared records are read-only and are not evidence of provider-authoritative verification.
 
+### Organisation analytics
+
+`GET /v1/analytics/summary` returns transaction counts by status, review rate, submitted invoice totals by currency and the most common failed checks. Optional `from_date` and `to_date` filters use UTC transaction creation dates. Amount totals represent submitted invoice values, not collected cash, revenue, receivables balances or lending exposure.
+
 ### Bulk transaction intake
 
 `POST /v1/transactions/batch` accepts 1–50 transaction items. Each item must provide its own idempotency key and transaction payload. Results are reported per item, so a conflict on one item does not hide successful commits for other items. This is synchronous partial-success processing, not an asynchronous job queue.
