@@ -35,7 +35,11 @@ def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool
     }
 
 
-def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_items: list[Evidence] | None = None) -> dict:
+def _aggregate(
+    checks_by_evidence: dict[str, dict[str, bool | None]],
+    evidence_items: list[Evidence] | None = None,
+    policy: dict | None = None,
+) -> dict:
     checks: dict[str, bool] = {}
     conflicts: list[str] = []
     incomplete_checks: list[str] = []
@@ -55,6 +59,9 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
     passed = sum(checks.values())
     core_score = sum(CHECK_WEIGHTS[name] for name, value in checks.items() if value)
 
+    policy = policy or {"require_commercial_evidence": True, "require_payment_evidence": True}
+    require_commercial = bool(policy.get("require_commercial_evidence", True))
+    require_payment = bool(policy.get("require_payment_evidence", True))
     items = evidence_items or []
     has_commercial = any(
         e.evidence_type in {"purchase_order", "contract"}
@@ -80,15 +87,15 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
 
     hard_conflict = bool(conflicts)
     complete_core_checks = passed == len(CHECK_NAMES) and not incomplete_checks and not hard_conflict
-    evidence_complete = has_commercial and has_payment
+    evidence_complete = (has_commercial or not require_commercial) and (has_payment or not require_payment)
     verified = complete_core_checks and evidence_complete
     status = "verified" if verified else "review_required"
 
     failed_checks = [name for name, value in checks.items() if not value]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
-    if not has_commercial:
+    if not has_commercial and require_commercial:
         failed_checks.append("missing_commercial_evidence")
-    if not has_payment:
+    if not has_payment and require_payment:
         failed_checks.append("missing_payment_evidence")
 
     return {
@@ -104,13 +111,17 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
         "supporting_evidence": supporting_evidence,
         "commercial_evidence_present": has_commercial,
         "payment_evidence_present": has_payment,
+        "policy_applied": {
+            "require_commercial_evidence": require_commercial,
+            "require_payment_evidence": require_payment,
+        },
     }
 
 
-def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
-    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)}, [evidence])
+def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence, policy: dict | None = None) -> dict:
+    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)}, [evidence], policy)
 
 
-def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
+def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence], policy: dict | None = None) -> dict:
     checks_by_evidence = {item.evidence_id: _checks_for_evidence(invoice, item) for item in evidence_items}
-    return _aggregate(checks_by_evidence, evidence_items)
+    return _aggregate(checks_by_evidence, evidence_items, policy)
