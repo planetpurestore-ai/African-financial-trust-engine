@@ -52,7 +52,9 @@ def extract_fields(text: str) -> dict:
     amount = None
     if amount_raw:
         try:
-            amount = float(Decimal(amount_raw.replace(",", "")))
+            # Preserve decimal precision for financial amounts; floats can
+            # silently round large values and fractions of a currency unit.
+            amount = format(Decimal(amount_raw.replace(",", "")), "f")
         except (InvalidOperation, ValueError):
             pass
     issue_raw = _first([r"(?:issue\s*date|invoice\s*date|date)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
