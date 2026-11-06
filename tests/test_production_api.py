@@ -12,6 +12,19 @@ from app.production_db import Base, engine
 
 Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
+# Production middleware expects this Alembic-managed policy table. Keep the
+# focused API test database self-contained instead of relying on a local DB.
+with engine.begin() as connection:
+    connection.exec_driver_sql("""
+        CREATE TABLE IF NOT EXISTS api_key_policies (
+            key_hash VARCHAR(128) PRIMARY KEY,
+            organization_id INTEGER NOT NULL,
+            expires_at TIMESTAMP,
+            scopes TEXT NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            last_used_at TIMESTAMP
+        )
+    """)
 client = TestClient(app)
 
 
