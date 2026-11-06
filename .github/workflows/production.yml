@@ -21,7 +21,17 @@ jobs:
       - name: Verify public browser endpoint
         run: |
           set -e
-          curl --fail --show-error --silent --location --max-time 30 \
-            https://african-financial-trust-engine-browser2.onrender.com/health
-          echo
-          echo "PUBLIC_HTTP_OK"
+          url="https://african-financial-trust-engine-browser2.onrender.com/health"
+          for attempt in $(seq 1 12); do
+            if curl --fail --show-error --silent --location --max-time 15 "$url"; then
+              echo
+              echo "PUBLIC_HTTP_OK"
+              exit 0
+            fi
+            if [ "$attempt" -lt 12 ]; then
+              echo "Endpoint not ready yet (attempt $attempt/12); retrying in 5 seconds."
+              sleep 5
+            fi
+          done
+          echo "Public health endpoint did not become ready within the retry window."
+          exit 1
