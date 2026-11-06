@@ -12,6 +12,9 @@ class Invoice(BaseModel):
     subtotal: Decimal | None = Field(default=None, ge=0)
     tax_amount: Decimal | None = Field(default=None, ge=0)
     total_amount: Decimal | None = Field(default=None, gt=0)
+    purchase_order_number: str | None = None
+    contract_reference: str | None = None
+    delivery_reference: str | None = None
     currency: str
     issue_date: date
     due_date: date
@@ -23,6 +26,14 @@ class Invoice(BaseModel):
         if not value:
             raise ValueError("must not be blank")
         return value
+
+    @field_validator("purchase_order_number", "contract_reference", "delivery_reference")
+    @classmethod
+    def normalize_optional_references(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
 
     @field_validator("currency")
     @classmethod
