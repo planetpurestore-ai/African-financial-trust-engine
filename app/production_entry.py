@@ -42,7 +42,8 @@ async def production_exception_handler(request: Request, exc: Exception):
     headers = {"X-Request-ID": request_id} if request_id else None
     return JSONResponse(status_code=500, content=body, headers=headers)
 
-DASHBOARD = Path(__file__).with_name("dashboard_operational.html")
+DASHBOARD = Path(__file__).with_name("dashboard_design3.html")
+OPERATIONS_DASHBOARD = Path(__file__).with_name("dashboard_operational.html")
 LEGACY_DASHBOARD = Path(__file__).with_name("dashboard_v2.html")
 
 @app.get("/", include_in_schema=False)
@@ -65,6 +66,10 @@ def payment_adapters():
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
     return HTMLResponse(content=DASHBOARD.read_text(encoding="utf-8"), media_type="text/html")
+
+@app.get("/operations", include_in_schema=False)
+def operations_dashboard():
+    return HTMLResponse(content=OPERATIONS_DASHBOARD.read_text(encoding="utf-8"), media_type="text/html")
 
 @app.get("/legacy-dashboard", include_in_schema=False)
 def legacy_dashboard():
