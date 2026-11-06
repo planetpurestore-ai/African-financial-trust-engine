@@ -28,7 +28,8 @@ with engine.begin() as connection:
 client = TestClient(app)
 
 
-def test_production_transaction_round_trip():
+def test_production_transaction_round_trip(caplog):
+    caplog.set_level("INFO", logger="aft.request")
     suffix = uuid.uuid4().hex[:12]
     invoice_number = f"INV-{suffix}"
     idempotency_key = f"case-{suffix}"
@@ -125,6 +126,10 @@ def test_production_transaction_round_trip():
     share_path = share.json()["share_path"]
     shared_record = client.get(share_path)
     assert shared_record.status_code == 200
+    assert any(
+        getattr(record, "http_path", None) == "/v1/shared/trust-records/{token}"
+        for record in caplog.records
+    )
     assert shared_record.json()["transaction_id"] == result["transaction_id"]
     share_list = client.get(
         f"/v1/transactions/{result['transaction_id']}/share-links",
