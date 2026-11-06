@@ -60,6 +60,15 @@ class KeyCreate(BaseModel):
 class ShareLinkCreate(BaseModel):
     expires_in_hours: int = Field(default=72, ge=1, le=720)
 
+class BulkTransactionItem(BaseModel):
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    transaction: ProductionTransaction
+
+
+class BulkTransactionRequest(BaseModel):
+    items: list[BulkTransactionItem] = Field(min_length=1, max_length=50)
+
+
 class ReviewDecisionCreate(BaseModel):
     decision: Literal["accepted_for_further_processing", "rejected"]
     reason: str = Field(min_length=10, max_length=2000)
@@ -425,6 +434,45 @@ def create_transaction(body: ProductionTransaction, response: Response, organiza
     result_json = json.dumps(verification, sort_keys=True, separators=(",", ":")); canonical = f"{previous_hash}|{tx.id}|{decision}|{verification['verification_score']}|{result_json}"; event_hash = hashlib.sha256(canonical.encode()).hexdigest()
     db.add(AuditEvent(organization_id=organization.id, transaction_id=tx.id, decision=decision, score=verification["verification_score"], result_json=result_json, previous_hash=previous_hash, event_hash=event_hash)); db.commit()
     return _transaction_response(tx, db)
+
+@router.post("/transactions/batch")
+def create_transactions_batch(
+    body: BulkTransactionRequest,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    results = []
+    for item in body.items:
+        item_response = Response(status_code=201)
+        try:
+            result = create_transaction(
+                item.transaction,
+                item_response,
+                organization,
+                db,
+                item.idempotency_key,
+            )
+            results.append({
+                "success": True,
+                "status_code": item_response.status_code,
+                "idempotency_key": item.idempotency_key,
+                "transaction": result,
+            })
+        except HTTPException as exc:
+            db.rollback()
+            results.append({
+                "success": False,
+                "status_code": exc.status_code,
+                "idempotency_key": item.idempotency_key,
+                "error": exc.detail,
+            })
+    return {
+        "count": len(results),
+        "successful": sum(1 for result in results if result["success"]),
+        "failed": sum(1 for result in results if not result["success"]),
+        "results": results,
+    }
+
 
 def _transaction_response(tx: Transaction, db: Session):
     audit = db.scalar(select(AuditEvent).where(AuditEvent.transaction_id == tx.id).order_by(desc(AuditEvent.id)))
