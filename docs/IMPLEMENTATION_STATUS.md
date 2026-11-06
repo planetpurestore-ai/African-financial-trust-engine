@@ -43,7 +43,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 25 | Document categorisation | **Partial** — extraction exists; persistent user-controlled document categories and classification workflow remain. |
 | 26 | Upload progress indicators | **Not independently verified** — requires browser-level UX testing and implementation if absent. |
 | 27 | Verification status tracking | **Basic implementation** — transaction status is stored and returned. |
-| 28 | Downloadable Trust Record | **Not implemented as a formal export** — transaction response contains verification and audit details, but a versioned export is still needed. |
+| 28 | Downloadable Trust Record | **Basic implementation** — a versioned JSON export includes submitted evidence, verification, audit hashes and limitations; PDF signing and external verification remain. |
 | 29 | Transaction history | **Implemented at API level** — organisation-scoped transaction listing exists. |
 | 30 | Correction/resubmission | **Not implemented** — immutable versioning and resubmission workflow remain. |
 | 31 | Secure record sharing | **Not implemented** — scoped, expiring, revocable share links are still required. |
@@ -87,6 +87,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Bootstrap-token provisioning for the first admin key, with admin removed from ordinary default scopes.
 - Idempotency-key payload conflict detection.
 - Exact decimal preservation in invoice extraction and source-record persistence.
+- Versioned downloadable Trust Record JSON export.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
