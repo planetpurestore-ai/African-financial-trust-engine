@@ -32,7 +32,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 19 | Confidence levels | **Partial** — a deterministic score is returned; it is not a calibrated probability and should not be presented as one. |
 | 20 | Institution-configurable risk rules | **Basic implementation** — organisation-scoped policies configure evidence requirements, duplicate/conflict decisions and an amount threshold; more granular, versioned rule builders remain. |
 | 21 | Explainability | **Implemented at MVP level** — checks, failed checks, conflicts and supporting evidence are returned. |
-| 22 | Human review workflow | **Partial** — review-required decisions and review UI elements exist; assignment, reviewer actions and decision history need completion. |
+| 22 | Human review workflow | **Basic implementation** — admin-scoped review queue, reasoned decisions, review history and hash-chained audit events exist; named reviewer roles, assignment and maker-checker approval remain. Machine verification status is not overwritten. |
 
 ## SME experience
 
@@ -54,7 +54,7 @@ This register distinguishes code that exists from capabilities that have been in
 | # | Improvement | Current assessment |
 |---:|---|---|
 | 33 | Institutional dashboard | **Partial** — dashboard variants exist; role-based, institution-ready workflows need validation. |
-| 34 | Reviewer permissions | **Not implemented end-to-end** — API key scopes are not a substitute for named reviewer roles. |
+| 34 | Reviewer permissions | **Partial** — human review routes are restricted to admin-scoped keys; named users, reviewer roles and granular separation of duties remain. |
 | 35 | Institution-specific risk settings | **Basic implementation** — admin-only GET/PUT settings are persisted per organisation; reviewer roles, version history and maker-checker approval remain. |
 | 36 | API integration documentation | **Partial** — OpenAPI docs and API documentation exist; partner onboarding guides and examples need completion. |
 | 37 | API sandbox | **Not implemented** — a separate isolated sandbox environment and test data are required. |
@@ -92,6 +92,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Structured request logs with request IDs, timing, status and share-token redaction.
 - Database-backed fixed-window API rate limits for authenticated and anonymous requests.
 - Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
+- Admin-scoped human review queue and reasoned review decisions appended to the audit hash chain without rewriting machine outcomes.
 - Multi-document upload endpoint with per-file partial-success reporting.
 - Exact-decimal subtotal/tax/total validation and extraction fields.
 - Conservative PDF/text integrity anomaly indicators attached to document extraction results.
