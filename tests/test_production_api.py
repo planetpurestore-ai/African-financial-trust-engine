@@ -197,3 +197,22 @@ def test_production_transaction_round_trip(caplog):
         json=changed_payload,
     )
     assert conflict.status_code == 409
+
+
+def test_api_key_rate_limit(monkeypatch):
+    monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
+    suffix = uuid.uuid4().hex[:8]
+    org_response = client.post(
+        "/v1/organizations",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+        json={"name": f"Rate Limit Test {suffix}"},
+    )
+    assert org_response.status_code == 201
+    api_key = org_response.json()["api_key"]
+    headers = {"X-API-Key": api_key}
+
+    first = client.get("/v1/transactions", headers=headers)
+    second = client.get("/v1/transactions", headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert int(second.headers["retry-after"]) >= 1
