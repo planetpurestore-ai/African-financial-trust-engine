@@ -4,8 +4,9 @@ import os
 import secrets
 import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, text
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
@@ -53,6 +54,78 @@ class OrganizationCreate(BaseModel):
 
 class KeyCreate(BaseModel):
     label: str = Field(default="api", min_length=1, max_length=100)
+
+class ShareLinkCreate(BaseModel):
+    expires_in_hours: int = Field(default=72, ge=1, le=720)
+
+
+def _share_token_hash(token: str) -> str:
+    pepper = os.getenv("API_KEY_PEPPER")
+    if not pepper:
+        raise RuntimeError("API_KEY_PEPPER is required")
+    return hashlib.sha256(("trust-record-share:" + pepper + token).encode()).hexdigest()
+
+
+def _ensure_share_link_table(db: Session) -> None:
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS transaction_share_links (
+            id VARCHAR(64) PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            transaction_id VARCHAR(64) NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            token_hash VARCHAR(64) NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            access_count INTEGER NOT NULL DEFAULT 0,
+            last_accessed_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    db.commit()
+
+
+def _as_utc_datetime(value):
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    raise ValueError("Invalid stored timestamp")
+
+
+def _trust_record_payload(tx: Transaction, db: Session) -> dict:
+    audit = db.scalar(select(AuditEvent).where(
+        AuditEvent.transaction_id == tx.id,
+        AuditEvent.organization_id == tx.organization_id,
+    ).order_by(desc(AuditEvent.id)))
+    try:
+        payload = json.loads(tx.payload or "{}")
+        invoice = payload.get("invoice") or {}
+        evidence = payload.get("evidence") or []
+    except (TypeError, json.JSONDecodeError):
+        raise HTTPException(500, "Stored transaction payload could not be read")
+    return {
+        "record_type": "african_financial_trust.trust_record",
+        "record_version": "1.0",
+        "issuer": "African Financial Trust",
+        "transaction_id": tx.id,
+        "invoice_number": tx.invoice_number,
+        "status": tx.status,
+        "invoice": invoice,
+        "evidence_submitted": evidence,
+        "verification": json.loads(audit.result_json) if audit else None,
+        "audit": {
+            "audit_id": audit.id if audit else None,
+            "previous_hash": audit.previous_hash if audit else None,
+            "event_hash": audit.event_hash if audit else None,
+            "created_at": audit.created_at.isoformat() if audit else None,
+        },
+        "created_at": tx.created_at.isoformat(),
+        "limitations": [
+            "This record reports checks performed on evidence submitted to the Trust Engine.",
+            "It is not a lending decision, credit rating, guarantee, or proof that an underlying transaction is genuine.",
+            "External source authority is only established when an authorised provider integration independently verifies the source.",
+        ],
+    }
 
 @router.post("/organizations", status_code=201)
 def create_organization(body: OrganizationCreate, x_bootstrap_token: str | None = Header(default=None, alias="X-Bootstrap-Token"), db: Session = Depends(db_session)):
@@ -265,45 +338,123 @@ def download_trust_record(transaction_id: str, organization: Organization = Depe
     tx = db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.organization_id == organization.id))
     if not tx:
         raise HTTPException(404, "Transaction not found")
-    audit = db.scalar(select(AuditEvent).where(
-        AuditEvent.transaction_id == tx.id,
-        AuditEvent.organization_id == organization.id,
-    ).order_by(desc(AuditEvent.id)))
-    try:
-        payload = json.loads(tx.payload or "{}")
-        invoice = payload.get("invoice") or {}
-        evidence = payload.get("evidence") or []
-    except (TypeError, json.JSONDecodeError):
-        raise HTTPException(500, "Stored transaction payload could not be read")
-    record = {
-        "record_type": "african_financial_trust.trust_record",
-        "record_version": "1.0",
-        "issuer": "African Financial Trust",
-        "transaction_id": tx.id,
-        "invoice_number": tx.invoice_number,
-        "status": tx.status,
-        "invoice": invoice,
-        "evidence_submitted": evidence,
-        "verification": json.loads(audit.result_json) if audit else None,
-        "audit": {
-            "audit_id": audit.id if audit else None,
-            "previous_hash": audit.previous_hash if audit else None,
-            "event_hash": audit.event_hash if audit else None,
-            "created_at": audit.created_at.isoformat() if audit else None,
-        },
-        "created_at": tx.created_at.isoformat(),
-        "limitations": [
-            "This record reports checks performed on evidence submitted to the Trust Engine.",
-            "It is not a lending decision, credit rating, guarantee, or proof that an underlying transaction is genuine.",
-            "External source authority is only established when an authorised provider integration independently verifies the source.",
-        ],
-    }
+    record = _trust_record_payload(tx, db)
     filename = f"aft-trust-record-{tx.id}.json"
     return Response(
         content=json.dumps(record, sort_keys=True, indent=2, default=str),
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+
+@router.post("/transactions/{transaction_id}/share-links", status_code=201)
+def create_trust_record_share(
+    transaction_id: str,
+    body: ShareLinkCreate,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == organization.id,
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    _ensure_share_link_table(db)
+    raw_token = "aft_share_" + secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=body.expires_in_hours)
+    share_id = uuid.uuid4().hex
+    db.execute(text("""
+        INSERT INTO transaction_share_links
+        (id, organization_id, transaction_id, token_hash, expires_at, revoked, access_count)
+        VALUES (:i, :o, :t, :h, :e, 0, 0)
+    """), {
+        "i": share_id,
+        "o": organization.id,
+        "t": tx.id,
+        "h": _share_token_hash(raw_token),
+        "e": expires_at.isoformat(),
+    })
+    db.commit()
+    return {
+        "share_id": share_id,
+        "share_path": f"/v1/shared/trust-records/{raw_token}",
+        "expires_at": expires_at.isoformat(),
+        "warning": "The share token is shown only once. Anyone holding it can view this Trust Record until it expires or is revoked.",
+    }
+
+
+@router.get("/transactions/{transaction_id}/share-links")
+def list_trust_record_shares(
+    transaction_id: str,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == organization.id,
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    _ensure_share_link_table(db)
+    rows = db.execute(text("""
+        SELECT id, expires_at, revoked, access_count, last_accessed_at, created_at
+        FROM transaction_share_links
+        WHERE organization_id=:o AND transaction_id=:t
+        ORDER BY created_at DESC
+    """), {"o": organization.id, "t": tx.id}).mappings().all()
+    return {"share_links": [dict(row) for row in rows]}
+
+
+@router.post("/transactions/{transaction_id}/share-links/{share_id}/revoke")
+def revoke_trust_record_share(
+    transaction_id: str,
+    share_id: str,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    _ensure_share_link_table(db)
+    result = db.execute(text("""
+        UPDATE transaction_share_links
+        SET revoked=1
+        WHERE id=:s AND transaction_id=:t AND organization_id=:o
+    """), {"s": share_id, "t": transaction_id, "o": organization.id})
+    db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(404, "Share link not found")
+    return {"share_id": share_id, "revoked": True}
+
+
+@router.get("/shared/trust-records/{token}")
+def access_shared_trust_record(token: str, db: Session = Depends(db_session)):
+    _ensure_share_link_table(db)
+    row = db.execute(text("""
+        SELECT id, organization_id, transaction_id, expires_at, revoked
+        FROM transaction_share_links
+        WHERE token_hash=:h
+    """), {"h": _share_token_hash(token)}).mappings().first()
+    if not row or row["revoked"]:
+        raise HTTPException(404, "Share link not found or revoked")
+    try:
+        expires_at = _as_utc_datetime(row["expires_at"])
+    except (TypeError, ValueError):
+        raise HTTPException(404, "Share link not found or expired")
+    if expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(404, "Share link not found or expired")
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == row["transaction_id"],
+        Transaction.organization_id == row["organization_id"],
+    ))
+    if not tx:
+        raise HTTPException(404, "Share link not found")
+    db.execute(text("""
+        UPDATE transaction_share_links
+        SET access_count=access_count+1, last_accessed_at=:now
+        WHERE id=:i
+    """), {"now": datetime.now(timezone.utc).isoformat(), "i": row["id"]})
+    db.commit()
+    return _trust_record_payload(tx, db)
 
 
 @router.get("/transactions")
