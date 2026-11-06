@@ -1,9 +1,9 @@
 databases:
-  - name: trust-engine-db
+  - name: trust-engine-db-replacement
     plan: free
     region: frankfurt
-    databaseName: trust_engine_db
-    user: trust_engine_db_user
+    databaseName: trust_engine_db_replacement
+    user: trust_engine_db_replacement_user
 
 services:
   - type: web
@@ -16,7 +16,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: trust-engine-db
+          name: trust-engine-db-replacement
           property: connectionString
       - key: API_KEY_PEPPER
         generateValue: true
