@@ -56,8 +56,16 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
     core_score = sum(CHECK_WEIGHTS[name] for name, value in checks.items() if value)
 
     items = evidence_items or []
-    has_commercial = any(e.evidence_type in {"purchase_order", "contract"} for e in items)
-    has_payment = any(e.evidence_type == "payment_record" for e in items)
+    has_commercial = any(
+        e.evidence_type in {"purchase_order", "contract"}
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency))
+        for e in items
+    )
+    has_payment = any(
+        e.evidence_type == "payment_record"
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency))
+        for e in items
+    )
 
     verification_score = core_score
     if has_commercial:
