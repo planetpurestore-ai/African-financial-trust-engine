@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class Evidence(BaseModel):
     evidence_id: str = Field(min_length=1)
-    evidence_type: Literal["purchase_order", "contract", "payment_record"]
+    evidence_type: Literal["purchase_order", "contract", "payment_record", "delivery_note"]
     reference_number: str = Field(min_length=1)
     supplier_name: str | None = None
     buyer_name: str | None = None
