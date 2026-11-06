@@ -60,7 +60,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 37 | API sandbox | **Not implemented** — a separate isolated sandbox environment and test data are required. |
 | 38 | Webhook notifications | **Partial** — signed inbound webhook intake and event deduplication exist; outbound notifications and retry handling remain. |
 | 39 | Bulk transaction processing | **Basic implementation** — batch endpoint accepts up to 50 transactions with per-item idempotency and partial outcomes; asynchronous jobs, progress polling and retry queues remain. |
-| 40 | Reporting and analytics | **Partial** — dashboard summaries exist; institution-grade reporting and export need work. |
+| 40 | Reporting and analytics | **Basic implementation** — organisation-scoped API summary reports transaction status, review rate, invoice totals by currency and common failed checks; large-scale pagination, scheduled exports and institution-specific reporting remain. |
 
 ## External dependencies and trust network
 
@@ -98,6 +98,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Conservative PDF/text integrity anomaly indicators attached to document extraction results.
 - Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
 - Bulk transaction intake endpoint with per-item idempotency and partial-success results.
+- Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
