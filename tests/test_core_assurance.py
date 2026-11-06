@@ -58,7 +58,7 @@ def test_document_extraction_is_explicitly_field_based():
     assert result["fields"]["supplier_name"] == "Supplier Ltd"
     assert result["fields"]["buyer_name"] == "Buyer Ltd"
     assert result["fields"]["currency"] == "USD"
-    assert result["fields"]["amount"] == 1500.0
+    assert result["fields"]["amount"] == "1500.00"
     assert result["fields"]["issue_date"] == "2026-09-15"
     assert result["fields"]["due_date"] == "2026-10-15"
     assert "confidence" in result
