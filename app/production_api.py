@@ -205,9 +205,16 @@ def list_integration_events(organization: Organization = Depends(require_api_key
 
 @router.post("/transactions", status_code=201)
 def create_transaction(body: ProductionTransaction, response: Response, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    normalized_payload = body.model_dump(mode="json")
     if idempotency_key:
+        if len(idempotency_key) > 255 or not idempotency_key.strip():
+            raise HTTPException(422, "Idempotency-Key must contain 1–255 non-whitespace characters")
         existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
-        if existing: response.status_code = 200; return _transaction_response(existing, db)
+        if existing:
+            if json.loads(existing.payload or "{}") != normalized_payload:
+                raise HTTPException(409, "Idempotency-Key was already used with a different request payload")
+            response.status_code = 200
+            return _transaction_response(existing, db)
     evidence_ids = [e.evidence_id for e in body.evidence]
     if len(evidence_ids) != len(set(evidence_ids)): raise HTTPException(422, "evidence_id values must be unique")
     duplicate = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.invoice_number == body.invoice.invoice_number)) is not None
