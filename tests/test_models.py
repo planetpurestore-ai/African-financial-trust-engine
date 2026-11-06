@@ -54,3 +54,33 @@ def test_evidence_normalizes_currency_and_rejects_blank_reference():
             evidence_type="purchase_order",
             reference_number="   ",
         )
+
+
+def test_invoice_rejects_subtotal_tax_total_arithmetic_mismatch():
+    valid = Invoice(
+        invoice_number="INV-TAX-1",
+        supplier_name="Supplier Ltd",
+        buyer_name="Buyer Ltd",
+        amount=Decimal("1150.00"),
+        subtotal=Decimal("1000.00"),
+        tax_amount=Decimal("150.00"),
+        total_amount=Decimal("1150.00"),
+        currency="USD",
+        issue_date=date(2026, 1, 10),
+        due_date=date(2026, 2, 10),
+    )
+    assert valid.amount == Decimal("1150.00")
+
+    with pytest.raises(ValidationError):
+        Invoice(
+            invoice_number="INV-TAX-2",
+            supplier_name="Supplier Ltd",
+            buyer_name="Buyer Ltd",
+            amount=Decimal("1150.00"),
+            subtotal=Decimal("1000.00"),
+            tax_amount=Decimal("149.00"),
+            total_amount=Decimal("1150.00"),
+            currency="USD",
+            issue_date=date(2026, 1, 10),
+            due_date=date(2026, 2, 10),
+        )
