@@ -13,7 +13,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 5 | Audit integrity | **Implemented in code; regression tests added** — hash-chain verification is being aligned with the writer and appends are serialized per organisation on PostgreSQL. |
 | 6 | Consistent error handling | **Partial** — validation and endpoint errors exist; a unified production error policy is still needed. |
 | 7 | Automated production tests | **In progress** — production tests and CI are being repaired and expanded. |
-| 8 | Rate limiting | **Not implemented** — requires a shared/distributed limiter for multi-instance deployments. |
+| 8 | Rate limiting | **Basic implementation** — fixed-window counters are stored in the shared database, with separate per-API-key and anonymous-IP limits; load testing and tuning remain. |
 | 9 | Structured application logging | **Partial implementation** — request method/path/status/duration and request ID are logged; bearer share tokens are redacted from paths. Central log shipping and alerting remain. |
 | 10 | Health monitoring | **Basic implementation** — database health endpoint and container health check exist; external uptime/alerting is not configured. |
 
@@ -90,6 +90,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Versioned downloadable Trust Record JSON export.
 - Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
 - Structured request logs with request IDs, timing, status and share-token redaction.
+- Database-backed fixed-window API rate limits for authenticated and anonymous requests.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
