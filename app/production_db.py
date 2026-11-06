@@ -94,6 +94,17 @@ class Document(Base):
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    transaction_id: Mapped[str] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    reviewer_api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id", ondelete="RESTRICT"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class IntegrationCredential(Base):
     __tablename__ = "integration_credentials"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
