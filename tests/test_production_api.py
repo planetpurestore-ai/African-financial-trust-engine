@@ -61,7 +61,7 @@ def test_production_transaction_round_trip(caplog):
         "/v1/documents/batch",
         headers={"X-API-Key": api_key},
         files=[
-            ("files", ("batch-note.txt", b"Invoice Number: DOC-1002", "text/plain")),
+            ("files", ("batch-note.txt", b"PO Number: PO-1002", "text/plain")),
             ("files", ("bad-image.png", b"not-an-image", "image/png")),
         ],
     )
