@@ -77,37 +77,41 @@ This register distinguishes code that exists from capabilities that have been in
 | 49 | Independent counterparty verification | **Partial** — a tenant-scoped trust graph exists; independent registry/identity evidence is not connected. |
 | 50 | Regulatory and compliance validation | **External professional work** — jurisdiction-specific legal, privacy, security and financial-sector review is required. |
 
-## Current hardening branch
+## Current production state (6 November 2026)
 
-The working branch `aft/production-hardening-2026-11` contains:
-- Bounded document reads and basic file-signature checks.
-- Audit-chain canonicalization correction and per-organisation transaction serialization.
-- Financial-source ingestion mounted in the production app, with client-submitted records forced to `unverified`.
-- API scope enforcement for financial-source routes.
-- Bootstrap-token provisioning for the first admin key, with admin removed from ordinary default scopes.
-- Idempotency-key payload conflict detection.
-- Exact decimal preservation in invoice extraction and source-record persistence.
-- Versioned downloadable Trust Record JSON export.
-- Expiring, revocable Trust Record share links with hashed tokens, access counts and a database migration.
-- Structured request logs with request IDs, timing, status and share-token redaction.
-- Safe generic production exception handling and expanded CORS support for API methods.
-- Database-backed fixed-window API rate limits for authenticated and anonymous requests.
-- Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
-- Admin-scoped human review queue and reasoned review decisions appended to the audit hash chain without rewriting machine outcomes.
-- Multi-document upload endpoint with per-file partial-success reporting.
-- Operational dashboard supports multi-file upload progress and reports per-file outcomes.
-- Exact-decimal subtotal/tax/total validation and extraction fields.
-- Conservative PDF/text integrity anomaly indicators attached to document extraction results.
-- Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
-- Delivery-note evidence type and explicit delivery-evidence presence reporting.
-- Bulk transaction intake endpoint with per-item idempotency and partial-success results.
-- Linked transaction resubmissions preserve original records and append supersession events to the audit chain.
-- Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
-- Regression tests for upload validation, audit verification, source authority, admin bootstrap, idempotency, rate limits, risk policies, human review, analytics and bulk transaction outcomes.
-- Clean-database Alembic upgrade validation in CI (all migrations through revision 0010).
-- Latest validated code commit `730a491`: 58 tests passed; dashboard JavaScript syntax and migration-upgrade checks passed.
-- Render deployment `dep-dbmrppdg1s2s73bo2ig0` is live; PostgreSQL migrations through revision `0010` completed and repeated `/health` checks returned HTTP 200.
+The production code is on `main`. The previous hardening work was merged in PR #3 and the Render service was subsequently switched to `main`.
 
-External provider prerequisites and source-authority requirements are documented in `docs/EXTERNAL_INTEGRATION_READINESS.md`.
+- Latest production deployment recorded: `dep-dbmrs1ijnfac73bah4t0`, commit `6d06bbceb5c0da59ea95c7dd107d896edc1f0cef`, status `live`.
+- Render recorded repeated HTTP 200 responses for `/health` and `/`. The health route performs a database `SELECT 1`.
+- The validated hardening commit passed 58 automated tests, dashboard JavaScript syntax validation, migration graph validation, clean SQLite migration upgrades, and production assurance checks. The later main-branch change selected the deployment branch and did not alter application logic.
+- The operational dashboard is served by `app/production_entry.py` from `app/dashboard_operational.html`.
+- The free Render PostgreSQL replacement database is temporary and expires 20 November 2026. It has no confirmed historical data restored from the former database. Do not store real customer financial records there until durable paid storage, backup/restore procedures and access controls have been approved and tested.
+- No live bank, mobile-money, PSP, accounting, ERP, registry, tax-authority or logistics provider is connected.
+- No independent penetration test, external security certification, legal/regulatory review or institutional pilot has been completed.
 
-This branch is not yet merged or deployed. The public Render health endpoint timed out on 6 November 2026 (30 seconds, zero bytes received). The Render service and its logs must be inspected before any deployment attempt. Passing automated tests is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
+## Remaining engineering work — not external integrations
+
+The items below are deliberately not marked complete merely because an endpoint or UI fragment exists:
+
+- **#6:** review endpoint-specific errors and client recovery guidance.
+- **#8–10:** load-test and tune rate limits; centralise logs; configure independent uptime monitoring and alert delivery.
+- **#11–14:** build a labelled document corpus and measure extraction accuracy; improve duplicate detection and arithmetic coverage for discounts, withholding and line items.
+- **#16–20:** implement line-item/quantity/term matching and calibrated confidence; expand risk policy versioning and controls.
+- **#22:** add named reviewer identities, assignments and maker-checker separation.
+- **#23–26:** improve guided SME onboarding, correction UX, category override and device/network testing.
+- **#28, #31:** add independently verifiable/signable exports and penetration-test bearer-link controls.
+- **#32:** complete real-device mobile QA; CSS responsiveness alone is not evidence of device validation.
+- **#33–35:** complete role-based institutional workflows and separation-of-duties validation.
+- **#37:** isolated API sandbox and resettable test fixtures are not implemented.
+- **#38:** inbound signed webhook ingestion exists; outbound delivery, retry/backoff, dead-letter handling and delivery visibility are not complete.
+- **#39:** synchronous bulk endpoint exists; durable asynchronous jobs, progress polling and retry queues are not implemented.
+- **#40:** the organisation analytics API exists and is bounded to 5,000 recent records; scheduled exports, pagination and institution-specific reporting remain.
+
+## External dependencies
+
+Items #41–50 remain subject to the external dependencies described above. Metadata-only connector registration, an adapter interface, or user-submitted data must never be described as an authoritative live integration.
+
+## Change log
+
+- 6 November 2026: corrected this register to reflect the merged `main` branch and current Render deployment, and to distinguish deployed MVP functions from unfinished production-grade work.
+- 6 November 2026: dashboard reporting updated to call the organisation analytics endpoint with optional date filters and provide CSV export. This change is pending CI and production deployment validation.
