@@ -14,7 +14,7 @@ from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence_set
 from app.risk_engine import assess, DEFAULT_RISK_SETTINGS
 from app.production_db import SessionLocal, Organization, OrganizationRiskSettings, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
-from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
+from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields, inspect_document_integrity
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
 
 router = APIRouter(prefix="/v1", tags=["production"])
@@ -278,6 +278,14 @@ async def upload_document(file: UploadFile = File(...), organization: Organizati
             raise HTTPException(415, "Text documents must use UTF-8 encoding")
         extraction = extract_fields(text)
         extraction["method"] = "text"
+
+    integrity = inspect_document_integrity(data, content_type)
+    extraction["integrity"] = integrity
+    if integrity["signals"]:
+        extraction["requires_review"] = True
+        extraction.setdefault("review_reasons", []).extend(
+            f"document_integrity:{signal}" for signal in integrity["signals"]
+        )
 
     doc_id = uuid.uuid4().hex
     db.add(Document(id=doc_id, organization_id=organization.id, filename=filename, content_type=content_type, sha256=digest, text=text, extraction_json=json.dumps(extraction, sort_keys=True)))
