@@ -1,6 +1,6 @@
 /* Pixel-match pass: Design 1 Premium Dark */
 :root{--sidebar:238px;--top:72px;--bg:#070f1d;--line:#1a2940;--panel:#0d1727;--panel2:#111d30;--text:#f7f9fc;--muted:#8795a8;--gold:#d9b45d;--gold2:#f1ce79;--green:#38d39f;--teal:#35c5d8;--red:#ff6672;--amber:#f2b64a}
-html,body{min-width:1180px;background:#070f1d;font-size:14px}
+html,body{background:#070f1d;font-size:14px}
 .app{background:linear-gradient(180deg,#070f1d 0%,#091323 55%,#070f1d 100%)}
 .topbar{height:72px;padding:0 28px;background:#0a111e;border-bottom:1px solid #1c2a3d}
 .brand{width:238px;gap:12px}.brandmark{width:36px;height:36px;border-radius:8px}.brandmark svg{width:25px;height:25px}.brandname{font-size:11px;letter-spacing:.4px}.product{font-size:13px;padding-left:18px;color:#d1d9e3}
@@ -14,4 +14,33 @@ html,body{min-width:1180px;background:#070f1d;font-size:14px}
 .activity{min-height:185px}.activityrow{gap:12px;padding:13px 0}.activityicon{width:29px;height:29px;font-size:10px}.activitytext b{font-size:10px}.activitytext small{font-size:8px;margin-top:3px}.time{font-size:8px}
 .table th{font-size:8px;padding:11px 13px}.table td{font-size:10px;padding:12px 13px}.pill{padding:4px 8px;font-size:8px}.pill:before{width:5px;height:5px}
 .sidecard .cbody{padding:15px}.healthrow{font-size:10px;padding:7px 0}.healthrow b{font-size:9px}
-@media(max-width:1180px){html,body{min-width:1180px}.main{padding-right:28px;padding-left:28px}}
+
+
+/* Preserve the operational dashboard's responsive layout on phones. */
+@media(max-width:700px){
+  html,body{min-width:0;font-size:14px}
+  .topbar{height:auto;min-height:64px;flex-wrap:wrap;padding:10px 12px}
+  .brand{width:auto;flex:1}
+  .product{order:3;width:100%;border-left:0;border-top:1px solid #1c2a3d;padding:7px 0 0 48px}
+  .online,.updated{display:none}
+  .shell{display:block;grid-template-columns:1fr}
+  .sidebar{display:flex;overflow-x:auto;gap:4px;padding:8px 10px;white-space:nowrap}
+  .nav{flex:0 0 auto;height:34px;padding:0 10px;margin:0}
+  .sidebottom{display:none}
+  .main{padding:16px 12px 28px}
+  .hero{display:block}
+  .hero h1{font-size:21px}
+  .hero-right{text-align:left;margin-top:10px}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .metric{height:auto;min-height:80px;padding:12px}
+  .mvalue{font-size:23px}
+  .content{display:block}
+  .outcome{grid-template-columns:112px 1fr;min-height:150px;gap:12px}
+  .donut{width:104px;height:104px}
+  .donut:before{width:76px;height:76px}
+  .grid{grid-template-columns:1fr}
+  .tablewrap{overflow:auto}
+  .table th,.table td{white-space:nowrap}
+  .ops{padding:13px}
+  .ptext{display:none}
+}
