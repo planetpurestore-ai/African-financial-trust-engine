@@ -6,16 +6,16 @@ This register distinguishes code that exists from capabilities that have been in
 
 | # | Improvement | Current assessment |
 |---:|---|---|
-| 1 | Test the production application independently | **CI-tested** — production entrypoint tests pass in CI; live PostgreSQL/Render runtime validation remains pending. |
+| 1 | Test the production application independently | **Deployed and smoke-tested** — Render deployment `dep-dbmrppdg1s2s73bo2ig0` is live; PostgreSQL migrations through `0010` completed; `/health` returned HTTP 200 repeatedly and `/` returned HTTP 200. |
 | 2 | Database persistence and migrations | **Implemented in code; deployment validation pending** — PostgreSQL support and Alembic migrations exist. |
 | 3 | Organisation isolation | **Implemented in core queries; coverage needs expansion** — transaction, document, audit, and source queries are organisation-scoped. |
 | 4 | API authentication and key controls | **Partially implemented** — hashed keys, expiry, scopes, revocation and bootstrap provisioning exist; operational policy needs further review. |
 | 5 | Audit integrity | **Implemented in code; regression tests added** — hash-chain verification is being aligned with the writer and appends are serialized per organisation on PostgreSQL. |
 | 6 | Consistent error handling | **Partial implementation** — generic production exceptions return a safe 500 response with request ID and are logged; endpoint-specific error semantics and client guidance still need review. |
-| 7 | Automated production tests | **CI-tested** — 55 automated tests passed on the latest validated code commit; the suite includes production API, security, review, resubmission, analytics and idempotency paths. |
+| 7 | Automated production tests | **CI-tested** — 58 automated tests passed on commit `730a491`; production assurance and migration checks passed. A separate public endpoint CI job was re-run after deployment because its first attempt raced the Render startup. |
 | 8 | Rate limiting | **Basic implementation** — fixed-window counters are stored in the shared database, with separate per-API-key and anonymous-IP limits; load testing and tuning remain. |
 | 9 | Structured application logging | **Partial implementation** — request method/path/status/duration and request ID are logged; bearer share tokens are redacted from paths. Central log shipping and alerting remain. |
-| 10 | Health monitoring | **Basic implementation; live check failing** — database health endpoint and container health check exist, but CI's latest request to the public Render `/health` endpoint timed out after 30 seconds with zero bytes; external uptime/alerting is not configured. |
+| 10 | Health monitoring | **Live endpoint healthy; alerting outstanding** — Render repeatedly recorded HTTP 200 from `/health` after deployment; the GitHub public-endpoint check is being re-run after startup to clear its deployment-timing race. External uptime/alerting is not configured. |
 
 ## Verification engine
 
@@ -105,7 +105,8 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, idempotency, rate limits, risk policies, human review, analytics and bulk transaction outcomes.
 - Clean-database Alembic upgrade validation in CI (all migrations through revision 0010).
-- Latest validated run: 55 tests passed; dashboard JavaScript syntax and migration-upgrade checks passed.
+- Latest validated code commit `730a491`: 58 tests passed; dashboard JavaScript syntax and migration-upgrade checks passed.
+- Render deployment `dep-dbmrppdg1s2s73bo2ig0` is live; PostgreSQL migrations through revision `0010` completed and repeated `/health` checks returned HTTP 200.
 
 External provider prerequisites and source-authority requirements are documented in `docs/EXTERNAL_INTEGRATION_READINESS.md`.
 
