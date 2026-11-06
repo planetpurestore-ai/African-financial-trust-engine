@@ -6,14 +6,15 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Literal
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from sqlalchemy import select, desc, text, func
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence_set
 from app.risk_engine import assess, DEFAULT_RISK_SETTINGS
-from app.production_db import SessionLocal, Organization, OrganizationRiskSettings, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
+from app.production_db import SessionLocal, Organization, OrganizationRiskSettings, ApiKey, Transaction, AuditEvent, ReviewDecision, Document, IntegrationCredential, IntegrationEvent
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields, inspect_document_integrity, classify_document
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
 
@@ -58,6 +59,19 @@ class KeyCreate(BaseModel):
 
 class ShareLinkCreate(BaseModel):
     expires_in_hours: int = Field(default=72, ge=1, le=720)
+
+class ReviewDecisionCreate(BaseModel):
+    decision: Literal["accepted_for_further_processing", "rejected"]
+    reason: str = Field(min_length=10, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("reason must contain at least 10 non-whitespace characters")
+        return value
+
 
 class RiskSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -144,10 +158,16 @@ def _as_utc_datetime(value):
 
 
 def _trust_record_payload(tx: Transaction, db: Session) -> dict:
-    audit = db.scalar(select(AuditEvent).where(
+    audits = db.scalars(select(AuditEvent).where(
         AuditEvent.transaction_id == tx.id,
         AuditEvent.organization_id == tx.organization_id,
-    ).order_by(desc(AuditEvent.id)))
+    ).order_by(desc(AuditEvent.id))).all()
+    latest_audit = audits[0] if audits else None
+    machine_audit = next((item for item in audits if not item.decision.startswith("manual_review:")), None)
+    latest_review = db.scalar(select(ReviewDecision).where(
+        ReviewDecision.transaction_id == tx.id,
+        ReviewDecision.organization_id == tx.organization_id,
+    ).order_by(desc(ReviewDecision.created_at)))
     try:
         payload = json.loads(tx.payload or "{}")
         invoice = payload.get("invoice") or {}
@@ -163,17 +183,24 @@ def _trust_record_payload(tx: Transaction, db: Session) -> dict:
         "status": tx.status,
         "invoice": invoice,
         "evidence_submitted": evidence,
-        "verification": json.loads(audit.result_json) if audit else None,
+        "verification": json.loads(machine_audit.result_json) if machine_audit else None,
+        "human_review": {
+            "decision": latest_review.decision,
+            "reason": latest_review.reason,
+            "reviewer_api_key_id": latest_review.reviewer_api_key_id,
+            "created_at": latest_review.created_at.isoformat(),
+        } if latest_review else None,
         "audit": {
-            "audit_id": audit.id if audit else None,
-            "previous_hash": audit.previous_hash if audit else None,
-            "event_hash": audit.event_hash if audit else None,
-            "created_at": audit.created_at.isoformat() if audit else None,
+            "audit_id": latest_audit.id if latest_audit else None,
+            "previous_hash": latest_audit.previous_hash if latest_audit else None,
+            "event_hash": latest_audit.event_hash if latest_audit else None,
+            "created_at": latest_audit.created_at.isoformat() if latest_audit else None,
         },
         "created_at": tx.created_at.isoformat(),
         "limitations": [
             "This record reports checks performed on evidence submitted to the Trust Engine.",
             "It is not a lending decision, credit rating, guarantee, or proof that an underlying transaction is genuine.",
+            "A human review disposition is recorded separately and does not rewrite the machine verification result.",
             "External source authority is only established when an authorised provider integration independently verifies the source.",
         ],
     }
@@ -551,6 +578,149 @@ def access_shared_trust_record(token: str, db: Session = Depends(db_session)):
     """), {"now": datetime.now(timezone.utc).isoformat(), "i": row["id"]})
     db.commit()
     return _trust_record_payload(tx, db)
+
+
+@router.get("/reviews")
+def list_review_queue(
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+    limit: int = 50,
+):
+    limit = max(1, min(limit, 100))
+    transactions = db.scalars(select(Transaction).where(
+        Transaction.organization_id == organization.id,
+        Transaction.status == "review_required",
+    ).order_by(Transaction.created_at.asc()).limit(limit)).all()
+    items = []
+    for tx in transactions:
+        audit = db.scalar(select(AuditEvent).where(
+            AuditEvent.transaction_id == tx.id,
+            AuditEvent.organization_id == organization.id,
+            ~AuditEvent.decision.startswith("manual_review:"),
+        ).order_by(desc(AuditEvent.id)))
+        review = db.scalar(select(ReviewDecision).where(
+            ReviewDecision.transaction_id == tx.id,
+            ReviewDecision.organization_id == organization.id,
+        ).order_by(desc(ReviewDecision.created_at)))
+        result = json.loads(audit.result_json) if audit else {}
+        items.append({
+            "transaction_id": tx.id,
+            "invoice_number": tx.invoice_number,
+            "status": tx.status,
+            "failed_checks": result.get("failed_checks", []),
+            "risk": result.get("risk"),
+            "latest_human_decision": review.decision if review else None,
+            "created_at": tx.created_at.isoformat(),
+        })
+    return {"count": len(items), "reviews": items}
+
+
+@router.get("/reviews/{transaction_id}")
+def get_review_history(
+    transaction_id: str,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == organization.id,
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    rows = db.scalars(select(ReviewDecision).where(
+        ReviewDecision.transaction_id == tx.id,
+        ReviewDecision.organization_id == organization.id,
+    ).order_by(desc(ReviewDecision.created_at))).all()
+    return {
+        "transaction_id": tx.id,
+        "machine_status": tx.status,
+        "review_history": [{
+            "decision": row.decision,
+            "reason": row.reason,
+            "reviewer_api_key_id": row.reviewer_api_key_id,
+            "created_at": row.created_at.isoformat(),
+        } for row in rows],
+    }
+
+
+@router.post("/reviews/{transaction_id}/decision", status_code=201)
+def record_review_decision(
+    transaction_id: str,
+    body: ReviewDecisionCreate,
+    x_api_key: str = Header(alias="X-API-Key"),
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    db.execute(select(Organization).where(Organization.id == organization.id).with_for_update()).scalar_one()
+    tx = db.scalar(select(Transaction).where(
+        Transaction.id == transaction_id,
+        Transaction.organization_id == organization.id,
+    ))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    if tx.status != "review_required":
+        raise HTTPException(409, "Only review-required transactions can receive a human disposition")
+    reviewer = db.scalar(select(ApiKey).where(
+        ApiKey.key_hash == _hash_key(x_api_key),
+        ApiKey.organization_id == organization.id,
+        ApiKey.active == 1,
+    ))
+    if not reviewer:
+        raise HTTPException(401, "Reviewer API key is invalid")
+    machine_audit = db.scalar(select(AuditEvent).where(
+        AuditEvent.transaction_id == tx.id,
+        AuditEvent.organization_id == organization.id,
+        ~AuditEvent.decision.startswith("manual_review:"),
+    ).order_by(desc(AuditEvent.id)))
+    latest_org_audit = db.scalar(select(AuditEvent).where(
+        AuditEvent.organization_id == organization.id,
+    ).order_by(desc(AuditEvent.id)))
+    previous_hash = latest_org_audit.event_hash if latest_org_audit else "GENESIS"
+    score = float(machine_audit.score) if machine_audit else 0.0
+    created_at = datetime.now(timezone.utc)
+    result = {
+        "event_type": "human_review_disposition",
+        "transaction_id": tx.id,
+        "machine_status": tx.status,
+        "decision": body.decision,
+        "reason": body.reason,
+        "reviewer_api_key_id": reviewer.id,
+        "created_at": created_at.isoformat(),
+    }
+    result_json = json.dumps(result, sort_keys=True, separators=(",", ":"))
+    decision_label = f"manual_review:{body.decision}"
+    canonical = f"{previous_hash}|{tx.id}|{decision_label}|{score}|{result_json}"
+    event_hash = hashlib.sha256(canonical.encode()).hexdigest()
+    review_id = uuid.uuid4().hex
+    db.add(ReviewDecision(
+        id=review_id,
+        organization_id=organization.id,
+        transaction_id=tx.id,
+        reviewer_api_key_id=reviewer.id,
+        decision=body.decision,
+        reason=body.reason,
+        created_at=created_at,
+    ))
+    db.add(AuditEvent(
+        organization_id=organization.id,
+        transaction_id=tx.id,
+        decision=decision_label,
+        score=score,
+        result_json=result_json,
+        previous_hash=previous_hash,
+        event_hash=event_hash,
+        created_at=created_at,
+    ))
+    db.commit()
+    return {
+        "review_id": review_id,
+        "transaction_id": tx.id,
+        "machine_status": tx.status,
+        "human_decision": body.decision,
+        "reason": body.reason,
+        "audit_hash": event_hash,
+        "created_at": created_at.isoformat(),
+    }
 
 
 @router.get("/transactions")
