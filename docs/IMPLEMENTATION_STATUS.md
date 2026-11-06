@@ -28,7 +28,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 15 | Supplier/buyer consistency | **Implemented for supplied evidence** — populated party names are compared and conflicting values require review. |
 | 16 | Purchase-order matching | **Partial** — PO evidence can support the invoice checks; line-item, quantity and delivery matching remain. |
 | 17 | Contract matching | **Partial** — contract evidence is accepted as commercial evidence; clause/term-level matching remains. |
-| 18 | Delivery evidence matching | **Not implemented** — delivery notes, proof of delivery and logistics events are not integrated into verification. |
+| 18 | Delivery evidence matching | **Partial intake support** — delivery-note evidence can be submitted, categorised and reported separately; matching delivery references, quantities, dates and carrier confirmations is not yet implemented. |
 | 19 | Confidence levels | **Partial** — a deterministic score is returned; it is not a calibrated probability and should not be presented as one. |
 | 20 | Institution-configurable risk rules | **Basic implementation** — organisation-scoped policies configure evidence requirements, duplicate/conflict decisions and an amount threshold; more granular, versioned rule builders remain. |
 | 21 | Explainability | **Implemented at MVP level** — checks, failed checks, conflicts and supporting evidence are returned. |
@@ -98,6 +98,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Exact-decimal subtotal/tax/total validation and extraction fields.
 - Conservative PDF/text integrity anomaly indicators attached to document extraction results.
 - Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
+- Delivery-note evidence type and explicit delivery-evidence presence reporting.
 - Bulk transaction intake endpoint with per-item idempotency and partial-success results.
 - Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
