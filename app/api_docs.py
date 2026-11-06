@@ -12,7 +12,7 @@ def capabilities():
             "idempotent_intake", "invoice_evidence_verification", "duplicate_detection",
             "risk_scoring", "explainable_decisioning", "hash_chained_audit",
             "deterministic_document_intake", "pdf_text_extraction", "image_ocr_adapter",
-            "financial_webhook_normalization", "event_deduplication", "invoice_arithmetic_validation", "document_integrity_indicators", "delivery_evidence_intake", "organisation_risk_policies", "human_review_queue", "organisation_analytics", "financial_source_records",
+            "financial_webhook_normalization", "event_deduplication", "invoice_arithmetic_validation", "document_integrity_indicators", "delivery_evidence_intake", "organisation_risk_policies", "human_review_queue", "transaction_revisions", "organisation_analytics", "financial_source_records",
             "source_reconciliation", "trust_record_export", "secure_share_links", "idempotency_payload_conflicts", "security_headers",
             "bounded_document_uploads", "batch_document_uploads", "bulk_transaction_intake", "document_categorisation", "database_rate_limiting", "request_size_limits"
         ],
