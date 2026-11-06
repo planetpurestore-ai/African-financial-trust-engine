@@ -31,8 +31,8 @@ def _expiry(value):
             parsed=datetime.fromisoformat(value.replace("Z", "+00:00"))
             return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
         except ValueError:
-            return None
-    return None
+            return datetime.min.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc) if value is not None else None
 
 async def bank_grade_security(request: Request, call_next):
     path=request.url.path
