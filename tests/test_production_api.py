@@ -106,6 +106,16 @@ def test_production_transaction_round_trip():
     assert chain.status_code == 200
     assert chain.json()["valid"] is True
 
+    trust_record = client.get(
+        f"/v1/transactions/{result['transaction_id']}/trust-record",
+        headers={"X-API-Key": api_key},
+    )
+    assert trust_record.status_code == 200
+    assert "attachment;" in trust_record.headers["content-disposition"]
+    assert trust_record.json()["record_type"] == "african_financial_trust.trust_record"
+    assert trust_record.json()["record_version"] == "1.0"
+    assert trust_record.json()["audit"]["event_hash"] == result["audit_hash"]
+
     # A customer-submitted record must never be able to self-declare as
     # independently verified, even if it supplies plausible provenance text.
     source = client.post(
