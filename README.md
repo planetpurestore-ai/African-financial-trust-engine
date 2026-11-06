@@ -76,9 +76,16 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 `GET /audits/{invoice_number}?limit=50`
 
-### Download a Trust Record
+### Download and securely share a Trust Record
 
 `GET /v1/transactions/{transaction_id}/trust-record` returns a versioned JSON export containing the submitted invoice/evidence, verification result, audit hashes and limitations.
+
+- `POST /v1/transactions/{transaction_id}/share-links` creates a random, expiring share token (1–720 hours; default 72).
+- `GET /v1/transactions/{transaction_id}/share-links` lists share metadata without exposing tokens.
+- `POST /v1/transactions/{transaction_id}/share-links/{share_id}/revoke` revokes a share.
+- `GET /v1/shared/trust-records/{token}` returns the record to anyone holding the token until expiry or revocation.
+
+The raw token is shown only once. Treat it as a bearer credential. Shared records are read-only and are not evidence of provider-authoritative verification.
 
 ### Production financial-source evidence
 
