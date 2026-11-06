@@ -24,7 +24,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 11 | Better invoice field extraction | **Partial** — PDF text, OCR adapter and deterministic extraction exist; layout coverage and extraction accuracy need a labelled test corpus. |
 | 12 | Authenticity/manipulation indicators | **Not implemented** — file signature checks are intake validation, not proof that an invoice is genuine. |
 | 13 | Duplicate invoice detection | **Basic implementation** — duplicate invoice numbers are flagged within an organisation; cross-source/fuzzy duplicate detection remains. |
-| 14 | Mathematical validation | **Not implemented** — subtotal/tax/total arithmetic and line-item reconciliation are not yet modelled. |
+| 14 | Mathematical validation | **Partial implementation** — exact-decimal subtotal + tax = invoice total validation is available when those fields are supplied/extracted; line-item, discount, withholding and multi-currency tax rules remain. |
 | 15 | Supplier/buyer consistency | **Implemented for supplied evidence** — populated party names are compared and conflicting values require review. |
 | 16 | Purchase-order matching | **Partial** — PO evidence can support the invoice checks; line-item, quantity and delivery matching remain. |
 | 17 | Contract matching | **Partial** — contract evidence is accepted as commercial evidence; clause/term-level matching remains. |
@@ -92,6 +92,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Structured request logs with request IDs, timing, status and share-token redaction.
 - Database-backed fixed-window API rate limits for authenticated and anonymous requests.
 - Multi-document upload endpoint with per-file partial-success reporting.
+- Exact-decimal subtotal/tax/total validation and extraction fields.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
