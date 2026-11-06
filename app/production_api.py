@@ -98,8 +98,8 @@ async def upload_document(file: UploadFile = File(...), organization: Organizati
     content_type = (file.content_type or "application/octet-stream").lower().split(";", 1)[0].strip()
     filename = (file.filename or "document")[:255]
     is_pdf = data.startswith(b"%PDF-")
-    is_png = data.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
-    is_jpeg = data.startswith(b"\\xff\\xd8\\xff")
+    is_png = data.startswith(bytes.fromhex("89504e470d0a1a0a"))
+    is_jpeg = data.startswith(bytes.fromhex("ffd8ff"))
     is_gif = data.startswith((b"GIF87a", b"GIF89a"))
     is_webp = len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
 
