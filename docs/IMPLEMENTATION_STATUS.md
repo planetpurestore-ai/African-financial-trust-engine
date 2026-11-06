@@ -101,6 +101,9 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Delivery-note evidence type and explicit delivery-evidence presence reporting.
 - Bulk transaction intake endpoint with per-item idempotency and partial-success results.
 - Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
-- Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
+- Regression tests for upload validation, audit verification, source authority, admin bootstrap, idempotency, rate limits, risk policies, human review, analytics and bulk transaction outcomes.
+- Clean-database Alembic upgrade validation in CI.
+
+External provider prerequisites and source-authority requirements are documented in `docs/EXTERNAL_INTEGRATION_READINESS.md`.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
