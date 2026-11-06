@@ -405,35 +405,127 @@ def list_integration_events(organization: Organization = Depends(require_api_key
     return {"count": len(rows), "events": [{"event_id": e.id, "provider": e.provider, "event_type": e.event_type, "event_key": e.event_key, "normalized": json.loads(e.normalized_json), "received_at": e.received_at.isoformat()} for e in rows]}
 
 @router.post("/transactions", status_code=201)
-def create_transaction(body: ProductionTransaction, response: Response, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
-    # Serialize transaction intake per organization on PostgreSQL. This makes
-    # idempotency checks, duplicate detection, and audit-chain append atomic
-    # with respect to other requests for the same organization.
+def create_transaction(
+    body: ProductionTransaction,
+    response: Response,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    supersedes_transaction_id: str | None = None,
+):
+    # Serialize transaction intake per organisation on PostgreSQL. This keeps
+    # idempotency checks, supersession and audit-chain appends in one order.
     db.execute(select(Organization).where(Organization.id == organization.id).with_for_update()).scalar_one()
     normalized_payload = body.model_dump(mode="json")
     if idempotency_key:
         if len(idempotency_key) > 255 or not idempotency_key.strip():
             raise HTTPException(422, "Idempotency-Key must contain 1–255 non-whitespace characters")
-        existing = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.idempotency_key == idempotency_key))
+        existing = db.scalar(select(Transaction).where(
+            Transaction.organization_id == organization.id,
+            Transaction.idempotency_key == idempotency_key,
+        ))
         if existing:
-            if json.loads(existing.payload or "{}") != normalized_payload:
-                raise HTTPException(409, "Idempotency-Key was already used with a different request payload")
+            if (
+                json.loads(existing.payload or "{}") != normalized_payload
+                or existing.revision_of != supersedes_transaction_id
+            ):
+                raise HTTPException(409, "Idempotency-Key was already used with a different request or revision")
             response.status_code = 200
             return _transaction_response(existing, db)
+
+    superseded_tx = None
+    if supersedes_transaction_id:
+        superseded_tx = db.scalar(select(Transaction).where(
+            Transaction.id == supersedes_transaction_id,
+            Transaction.organization_id == organization.id,
+        ))
+        if not superseded_tx:
+            raise HTTPException(404, "Transaction to correct was not found")
+        if superseded_tx.status not in {"review_required", "rejected"}:
+            raise HTTPException(409, "Only review-required or rejected transactions can be resubmitted")
+        if superseded_tx.superseded_by_transaction_id:
+            raise HTTPException(409, "This transaction has already been superseded")
+        if superseded_tx.invoice_number.casefold() != body.invoice.invoice_number.casefold():
+            raise HTTPException(422, "A resubmission must retain the original invoice number")
+
     evidence_ids = [e.evidence_id for e in body.evidence]
-    if len(evidence_ids) != len(set(evidence_ids)): raise HTTPException(422, "evidence_id values must be unique")
-    duplicate = db.scalar(select(Transaction).where(
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise HTTPException(422, "evidence_id values must be unique")
+    duplicate_query = select(Transaction).where(
         Transaction.organization_id == organization.id,
         func.lower(Transaction.invoice_number) == body.invoice.invoice_number.casefold(),
-    )) is not None
+    )
+    if supersedes_transaction_id:
+        duplicate_query = duplicate_query.where(Transaction.id != supersedes_transaction_id)
+    duplicate = db.scalar(duplicate_query) is not None
+
     risk_settings = _risk_settings_for_org(db, organization.id)
     verification = compare_invoice_to_evidence_set(body.invoice, body.evidence, policy=risk_settings)
     risk = assess(body.invoice, body.evidence, duplicate=duplicate, settings=risk_settings)
-    decision = "verified" if verification["status"] == "verified" and risk["decision"] == "approve" else ("rejected" if risk["decision"] == "reject" else "review_required"); verification["risk"] = risk
-    tx = Transaction(id=uuid.uuid4().hex, organization_id=organization.id, invoice_number=body.invoice.invoice_number, payload=json.dumps(body.model_dump(mode="json")), status=decision, idempotency_key=idempotency_key); db.add(tx); db.flush()
-    previous = db.scalar(select(AuditEvent).where(AuditEvent.organization_id == organization.id).order_by(desc(AuditEvent.id))); previous_hash = previous.event_hash if previous else "0" * 64
-    result_json = json.dumps(verification, sort_keys=True, separators=(",", ":")); canonical = f"{previous_hash}|{tx.id}|{decision}|{verification['verification_score']}|{result_json}"; event_hash = hashlib.sha256(canonical.encode()).hexdigest()
-    db.add(AuditEvent(organization_id=organization.id, transaction_id=tx.id, decision=decision, score=verification["verification_score"], result_json=result_json, previous_hash=previous_hash, event_hash=event_hash)); db.commit()
+    decision = "verified" if verification["status"] == "verified" and risk["decision"] == "approve" else ("rejected" if risk["decision"] == "reject" else "review_required")
+    verification["risk"] = risk
+
+    tx = Transaction(
+        id=uuid.uuid4().hex,
+        organization_id=organization.id,
+        invoice_number=body.invoice.invoice_number,
+        payload=json.dumps(normalized_payload),
+        status=decision,
+        idempotency_key=idempotency_key,
+        revision_of=supersedes_transaction_id,
+    )
+    db.add(tx)
+    db.flush()
+
+    if superseded_tx:
+        superseded_tx.superseded_by_transaction_id = tx.id
+        prior_org_event = db.scalar(select(AuditEvent).where(
+            AuditEvent.organization_id == organization.id,
+        ).order_by(desc(AuditEvent.id)))
+        prior_hash = prior_org_event.event_hash if prior_org_event else "0" * 64
+        prior_machine_event = db.scalar(select(AuditEvent).where(
+            AuditEvent.organization_id == organization.id,
+            AuditEvent.transaction_id == superseded_tx.id,
+            AuditEvent.decision != "superseded_by_resubmission",
+        ).order_by(desc(AuditEvent.id)))
+        prior_score = float(prior_machine_event.score) if prior_machine_event else 0.0
+        supersede_result = json.dumps({
+            "event_type": "transaction_superseded",
+            "original_transaction_id": superseded_tx.id,
+            "replacement_transaction_id": tx.id,
+            "reason": "corrected evidence or invoice resubmitted",
+        }, sort_keys=True, separators=(",", ":"))
+        supersede_decision = "superseded_by_resubmission"
+        supersede_canonical = f"{prior_hash}|{superseded_tx.id}|{supersede_decision}|{prior_score}|{supersede_result}"
+        supersede_hash = hashlib.sha256(supersede_canonical.encode()).hexdigest()
+        db.add(AuditEvent(
+            organization_id=organization.id,
+            transaction_id=superseded_tx.id,
+            decision=supersede_decision,
+            score=prior_score,
+            result_json=supersede_result,
+            previous_hash=prior_hash,
+            event_hash=supersede_hash,
+        ))
+        db.flush()
+
+    previous = db.scalar(select(AuditEvent).where(
+        AuditEvent.organization_id == organization.id,
+    ).order_by(desc(AuditEvent.id)))
+    previous_hash = previous.event_hash if previous else "0" * 64
+    result_json = json.dumps(verification, sort_keys=True, separators=(",", ":"))
+    canonical = f"{previous_hash}|{tx.id}|{decision}|{verification['verification_score']}|{result_json}"
+    event_hash = hashlib.sha256(canonical.encode()).hexdigest()
+    db.add(AuditEvent(
+        organization_id=organization.id,
+        transaction_id=tx.id,
+        decision=decision,
+        score=verification["verification_score"],
+        result_json=result_json,
+        previous_hash=previous_hash,
+        event_hash=event_hash,
+    ))
+    db.commit()
     return _transaction_response(tx, db)
 
 @router.post("/transactions/batch")
