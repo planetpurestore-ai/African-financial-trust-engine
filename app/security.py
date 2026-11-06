@@ -1,8 +1,12 @@
 import os
 import re
 import uuid
+import logging
+import time
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger("aft.request")
 
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(12 * 1024 * 1024)))
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -19,7 +23,33 @@ async def request_size_guard(request: Request, call_next):
     supplied_request_id = request.headers.get("X-Request-ID")
     request_id = supplied_request_id if supplied_request_id and _REQUEST_ID.fullmatch(supplied_request_id) else uuid.uuid4().hex
     request.state.request_id = request_id
-    response = await call_next(request)
+    started = time.perf_counter()
+    safe_path = request.url.path
+    if safe_path.startswith("/v1/shared/trust-records/"):
+        safe_path = "/v1/shared/trust-records/{token}"
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "http_request_failed",
+            extra={
+                "request_id": request_id,
+                "http_method": request.method,
+                "http_path": safe_path,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            },
+        )
+        raise
+    logger.info(
+        "http_request",
+        extra={
+            "request_id": request_id,
+            "http_method": request.method,
+            "http_path": safe_path,
+            "http_status": response.status_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
