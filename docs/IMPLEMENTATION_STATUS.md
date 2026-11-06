@@ -40,7 +40,7 @@ This register distinguishes code that exists from capabilities that have been in
 |---:|---|---|
 | 23 | Simplified SME submission | **Partial** — document and transaction intake APIs exist; a complete guided SME onboarding/submission flow remains. |
 | 24 | Multiple-document upload | **Basic implementation** — batch endpoint accepts up to ten files and reports per-file success/failure; overall request size remains capped. |
-| 25 | Document categorisation | **Partial** — extraction exists; persistent user-controlled document categories and classification workflow remain. |
+| 25 | Document categorisation | **Basic implementation** — rule-based invoice, PO, contract, payment-record and delivery-note suggestions are persisted and returned; user override and classifier accuracy testing remain. |
 | 26 | Upload progress indicators | **Not independently verified** — requires browser-level UX testing and implementation if absent. |
 | 27 | Verification status tracking | **Basic implementation** — transaction status is stored and returned. |
 | 28 | Downloadable Trust Record | **Basic implementation** — a versioned JSON export includes submitted evidence, verification, audit hashes and limitations; PDF signing and external verification remain. |
@@ -95,6 +95,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Multi-document upload endpoint with per-file partial-success reporting.
 - Exact-decimal subtotal/tax/total validation and extraction fields.
 - Conservative PDF/text integrity anomaly indicators attached to document extraction results.
+- Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
