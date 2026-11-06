@@ -15,7 +15,7 @@ from app.security import request_size_guard, allowed_origins
 from app.payment_adapters import adapter_catalog
 from app.financial_sources_api import router as financial_sources_router
 
-app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.1", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
+app = FastAPI(title="African Financial Trust Trust Engine", version="2.5.0", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
 if origins:
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key", "X-Request-ID"])
