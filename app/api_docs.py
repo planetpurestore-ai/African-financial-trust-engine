@@ -6,7 +6,7 @@ router = APIRouter(tags=["system"])
 def capabilities():
     return {
         "service": "African Financial Trust Trust Engine",
-        "version": "2.4.1",
+        "version": "2.5.0",
         "capabilities": [
             "organization_isolation", "api_key_authentication", "key_rotation_and_revocation",
             "idempotent_intake", "invoice_evidence_verification", "duplicate_detection",
