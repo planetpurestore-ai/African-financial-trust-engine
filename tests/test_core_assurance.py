@@ -64,3 +64,15 @@ def test_document_extraction_is_explicitly_field_based():
     assert result["fields"]["issue_date"] == "2026-09-15"
     assert result["fields"]["due_date"] == "2026-10-15"
     assert "confidence" in result
+
+
+def test_document_extraction_flags_subtotal_tax_mismatch():
+    text = (
+        "Invoice Number: INV-10\\nSupplier: Supplier Ltd\\nBuyer: Buyer Ltd\\n"
+        "Currency: USD\\nSubtotal: 1200.00\\nTax Amount: 250.00\\n"
+        "Amount: 1500.00\\nIssue Date: 15 September 2026"
+    )
+    result = extract_fields(text)
+    assert result["arithmetic_consistent"] is False
+    assert result["requires_review"] is True
+    assert "subtotal_tax_total_mismatch" in result["review_reasons"]
