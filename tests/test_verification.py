@@ -119,7 +119,9 @@ def test_delivery_note_is_reported_as_delivery_evidence_not_payment():
 
 
 def test_declared_purchase_order_reference_must_match_evidence():
-    invoice = Invoice(**make_invoice().model_dump(), purchase_order_number="PO-001")
+    invoice_data = make_invoice().model_dump()
+    invoice_data["purchase_order_number"] = "PO-001"
+    invoice = Invoice(**invoice_data)
     result = compare_invoice_to_evidence_set(invoice, [make_po(), make_payment()])
     assert result["status"] == "verified"
     assert result["reference_checks"]["purchase_order_number"]["matched"] is True
@@ -127,7 +129,9 @@ def test_declared_purchase_order_reference_must_match_evidence():
 
 
 def test_declared_purchase_order_reference_mismatch_requires_review():
-    invoice = Invoice(**make_invoice().model_dump(), purchase_order_number="PO-EXPECTED")
+    invoice_data = make_invoice().model_dump()
+    invoice_data["purchase_order_number"] = "PO-EXPECTED"
+    invoice = Invoice(**invoice_data)
     result = compare_invoice_to_evidence_set(invoice, [make_po(), make_payment()])
     assert result["status"] == "review_required"
     assert result["verification_score"] == 90.0
@@ -135,11 +139,10 @@ def test_declared_purchase_order_reference_mismatch_requires_review():
 
 
 def test_contract_and_delivery_references_are_matched_to_their_own_evidence_types():
-    invoice = Invoice(
-        **make_invoice().model_dump(),
-        contract_reference="CON-100",
-        delivery_reference="DEL-100",
-    )
+    invoice_data = make_invoice().model_dump()
+    invoice_data["contract_reference"] = "CON-100"
+    invoice_data["delivery_reference"] = "DEL-100"
+    invoice = Invoice(**invoice_data)
     contract = Evidence(
         evidence_id="CON-EVIDENCE",
         evidence_type="contract",
