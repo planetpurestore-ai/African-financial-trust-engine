@@ -46,7 +46,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 28 | Downloadable Trust Record | **Basic implementation** — a versioned JSON export includes submitted evidence, verification, audit hashes and limitations; PDF signing and external verification remain. |
 | 29 | Transaction history | **Implemented at API level** — organisation-scoped transaction listing exists. |
 | 30 | Correction/resubmission | **Not implemented** — immutable versioning and resubmission workflow remain. |
-| 31 | Secure record sharing | **Not implemented** — scoped, expiring, revocable share links are still required. |
+| 31 | Secure record sharing | **Basic implementation** — random token links expire, can be revoked, are stored hashed, and record access is counted; shared links are bearer credentials and need rate limiting/penetration testing. |
 | 32 | Mobile responsiveness | **Needs device testing** — no claim of complete mobile QA is made. |
 
 ## Institutional partner experience
@@ -88,6 +88,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Idempotency-key payload conflict detection.
 - Exact decimal preservation in invoice extraction and source-record persistence.
 - Versioned downloadable Trust Record JSON export.
+- Expiring, revocable Trust Record share links with hashed tokens and access counts.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
