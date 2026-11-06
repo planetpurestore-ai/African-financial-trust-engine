@@ -6,14 +6,15 @@ router = APIRouter(tags=["system"])
 def capabilities():
     return {
         "service": "African Financial Trust Trust Engine",
-        "version": "2.3.0",
+        "version": "2.4.1",
         "capabilities": [
             "organization_isolation", "api_key_authentication", "key_rotation_and_revocation",
             "idempotent_intake", "invoice_evidence_verification", "duplicate_detection",
             "risk_scoring", "explainable_decisioning", "hash_chained_audit",
             "deterministic_document_intake", "pdf_text_extraction", "image_ocr_adapter",
-            "financial_webhook_normalization", "event_deduplication", "security_headers",
-            "request_size_limits"
+            "financial_webhook_normalization", "event_deduplication", "financial_source_records",
+            "source_reconciliation", "idempotency_payload_conflicts", "security_headers",
+            "bounded_document_uploads", "request_size_limits"
         ],
         "decisions": ["verified", "review_required", "rejected"],
         "partnership_dependent": [
