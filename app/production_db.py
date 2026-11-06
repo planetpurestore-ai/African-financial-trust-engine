@@ -67,6 +67,8 @@ class Transaction(Base):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="received", nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revision_of: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    superseded_by_transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "idempotency_key", name="uq_transaction_idempotency"),)
 
