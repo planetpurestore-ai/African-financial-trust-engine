@@ -76,6 +76,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 `GET /audits/{invoice_number}?limit=50`
 
+### Production financial-source evidence
+
+`POST /v1/sources/records` stores customer-submitted financial-source records as `unverified`. Customer-supplied provenance cannot promote a record to independently verified. Use `GET /v1/sources/records` to retrieve stored records and `GET /v1/sources/reconcile/{transaction_id}` for decision-support comparisons. A live provider adapter must establish authority separately.
+
 ### Verify stored records
 
 `POST /verify-stored/{invoice_number}/{evidence_id}`
@@ -88,7 +92,7 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 The engine is deliberately explainable. Missing evidence is never silently treated as a pass. Each check is explicit, failed and incomplete checks are returned, conflicts are identified, and the result includes a verification score plus evidence attribution.
 
-A `verified` result currently means all defined checks pass without unresolved conflicts or incomplete checks. A partial or conflicting result is `review_required`. A zero-check stored-record result is `rejected`. These are prototype verification states, not lending or credit decisions.
+A `verified` result requires all four core invoice checks to pass without unresolved conflicts or incomplete fields, plus substantive commercial evidence (a purchase order or contract) and substantive payment evidence. A missing evidence category or conflicting result is `review_required`; a zero-check stored-record result is `rejected`. The score is a deterministic rule score, not a calibrated probability. These are verification states, not lending or credit decisions.
 
 For multiple evidence records, a check is supported when at least one supplied evidence record provides a matching value. When multiple evidence records disagree on a populated field, the engine identifies the conflict and requires review rather than silently choosing a value.
 
