@@ -238,6 +238,65 @@ def test_production_transaction_round_trip(caplog):
     assert policy_transaction.json()["status"] == "verified"
     assert policy_transaction.json()["verification"]["policy_applied"]["require_payment_evidence"] is False
 
+    # Restore the default evidence requirement and exercise the human review queue.
+    restored_policy = client.put(
+        "/v1/risk-settings",
+        headers={"X-API-Key": api_key},
+        json={"require_payment_evidence": True},
+    )
+    assert restored_policy.status_code == 200
+    review_transaction = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"review-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": f"REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [{
+                "evidence_id": f"PO-REVIEW-{suffix}",
+                "evidence_type": "purchase_order",
+                "reference_number": f"PO-REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+            }],
+        },
+    )
+    assert review_transaction.status_code == 201
+    review_tx_id = review_transaction.json()["transaction_id"]
+    assert review_transaction.json()["status"] == "review_required"
+    review_queue = client.get("/v1/reviews", headers={"X-API-Key": api_key})
+    assert review_queue.status_code == 200
+    assert any(item["transaction_id"] == review_tx_id for item in review_queue.json()["reviews"])
+    human_decision = client.post(
+        f"/v1/reviews/{review_tx_id}/decision",
+        headers={"X-API-Key": api_key},
+        json={
+            "decision": "accepted_for_further_processing",
+            "reason": "Counterparty confirmation received by authorised reviewer.",
+        },
+    )
+    assert human_decision.status_code == 201
+    assert human_decision.json()["machine_status"] == "review_required"
+    review_history = client.get(f"/v1/reviews/{review_tx_id}", headers={"X-API-Key": api_key})
+    assert review_history.status_code == 200
+    assert len(review_history.json()["review_history"]) == 1
+    reviewed_record = client.get(
+        f"/v1/transactions/{review_tx_id}/trust-record",
+        headers={"X-API-Key": api_key},
+    )
+    assert reviewed_record.json()["human_review"]["decision"] == "accepted_for_further_processing"
+    reviewed_chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
+    assert reviewed_chain.status_code == 200
+    assert reviewed_chain.json()["valid"] is True
+
     repeat = client.post(
         "/v1/transactions",
         headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
