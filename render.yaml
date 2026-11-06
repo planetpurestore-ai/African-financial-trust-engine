@@ -11,6 +11,7 @@ services:
     runtime: docker
     plan: free
     region: frankfurt
+    branch: aft/production-hardening-2026-11
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
