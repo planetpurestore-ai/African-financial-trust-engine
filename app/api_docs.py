@@ -13,7 +13,7 @@ def capabilities():
             "risk_scoring", "explainable_decisioning", "hash_chained_audit",
             "deterministic_document_intake", "pdf_text_extraction", "image_ocr_adapter",
             "financial_webhook_normalization", "event_deduplication", "financial_source_records",
-            "source_reconciliation", "idempotency_payload_conflicts", "security_headers",
+            "source_reconciliation", "trust_record_export", "idempotency_payload_conflicts", "security_headers",
             "bounded_document_uploads", "request_size_limits"
         ],
         "decisions": ["verified", "review_required", "rejected"],
