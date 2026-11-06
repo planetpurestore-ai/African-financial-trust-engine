@@ -22,7 +22,7 @@ This register distinguishes code that exists from capabilities that have been in
 | # | Improvement | Current assessment |
 |---:|---|---|
 | 11 | Better invoice field extraction | **Partial** — PDF text, OCR adapter and deterministic extraction exist; layout coverage and extraction accuracy need a labelled test corpus. |
-| 12 | Authenticity/manipulation indicators | **Not implemented** — file signature checks are intake validation, not proof that an invoice is genuine. |
+| 12 | Authenticity/manipulation indicators | **Partial implementation** — PDF active actions/scripts, embedded files, encryption, multiple revision markers, signature-field presence and text control characters can trigger review; these are heuristics, not authenticity proof or cryptographic signature verification. |
 | 13 | Duplicate invoice detection | **Basic implementation** — duplicate invoice numbers are flagged within an organisation; cross-source/fuzzy duplicate detection remains. |
 | 14 | Mathematical validation | **Partial implementation** — exact-decimal subtotal + tax = invoice total validation is available when those fields are supplied/extracted; line-item, discount, withholding and multi-currency tax rules remain. |
 | 15 | Supplier/buyer consistency | **Implemented for supplied evidence** — populated party names are compared and conflicting values require review. |
@@ -94,6 +94,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
 - Multi-document upload endpoint with per-file partial-success reporting.
 - Exact-decimal subtotal/tax/total validation and extraction fields.
+- Conservative PDF/text integrity anomaly indicators attached to document extraction results.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, and idempotency.
 
 This branch is not yet merged or deployed. Passing CI is not a substitute for production database testing, penetration testing, external provider certification, or a live institutional pilot.
