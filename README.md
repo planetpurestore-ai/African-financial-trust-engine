@@ -145,11 +145,13 @@ pytest -q
 
 GitHub Actions runs the same suite on pushes to `main`, pull requests targeting `main`, and manual workflow dispatches.
 
-## Prototype boundary
+## Production-readiness boundary
 
-This is a functional engineering MVP, not production financial infrastructure. The prototype is intentionally limited to structured evidence supplied by the caller. It does not yet connect to live bank, mobile-money, accounting, ERP, logistics or government data sources, and it does not make lending or credit decisions.
+The repository contains a functional engineering MVP and a separate production-hardening branch. The branch adds API controls, database-backed rate limits, audit-chain improvements, batch intake, document integrity indicators, organisation-level risk policies, human review records, Trust Record exports/shares and analytics. Those changes are not live until merged and deployed.
 
-Production work after the prototype includes authentication and authorization, encryption and secrets management, production database infrastructure, source integrations, richer verification and anomaly rules, observability, security testing, regulatory/compliance review, data-retention controls and institutional pilots.
+The engine is not yet production-certified financial infrastructure. It has no live bank, mobile-money, PSP, accounting, ERP, registry, tax-authority or logistics provider connections. Its rule score is not a calibrated probability, and it does not make lending or credit decisions. Document anomaly signals are not proof of authenticity.
+
+External provider prerequisites and source-authority rules are documented in [docs/EXTERNAL_INTEGRATION_READINESS.md](docs/EXTERNAL_INTEGRATION_READINESS.md). The full 50-point implementation register is in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 ## Vision
 
