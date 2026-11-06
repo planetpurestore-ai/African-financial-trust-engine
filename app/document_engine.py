@@ -40,10 +40,12 @@ def _normalize_date(value):
 
 
 
-def inspect_document_integrity(data: bytes, content_type: str) -> dict:
+def inspect_document_integrity(data: bytes | str, content_type: str) -> dict:
     """Return conservative tampering-risk indicators, never an authenticity verdict."""
     signals = []
     if content_type == "application/pdf":
+        if isinstance(data, str):
+            data = data.encode("utf-8")
         if data.count(b"%%EOF") > 1:
             signals.append("multiple_pdf_revision_markers")
         if re.search(rb"/(?:JavaScript|JS)\b", data):
@@ -57,14 +59,20 @@ def inspect_document_integrity(data: bytes, content_type: str) -> dict:
         if b"/ByteRange" in data and b"/Contents" in data:
             signals.append("pdf_signature_field_present_but_not_cryptographically_verified")
     elif content_type.startswith("text/"):
-        if bytes([0]) in data:
-            signals.append("text_contains_null_bytes")
-        try:
-            decoded = data.decode("utf-8")
-            if any(0x202A <= ord(char) <= 0x202E or 0x2066 <= ord(char) <= 0x2069 for char in decoded):
-                signals.append("text_contains_bidirectional_override_controls")
-        except UnicodeDecodeError:
-            signals.append("text_encoding_is_not_utf8")
+        if isinstance(data, bytes):
+            if bytes([0]) in data:
+                signals.append("text_contains_null_bytes")
+            try:
+                decoded = data.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded = ""
+                signals.append("text_encoding_is_not_utf8")
+        else:
+            decoded = data
+            if chr(0) in decoded:
+                signals.append("text_contains_null_bytes")
+        if any(0x202A <= ord(char) <= 0x202E or 0x2066 <= ord(char) <= 0x2069 for char in decoded):
+            signals.append("text_contains_bidirectional_override_controls")
     return {
         "status": "review" if signals else "no_obvious_anomaly",
         "signals": signals,
