@@ -117,6 +117,11 @@ def test_production_transaction_round_trip(caplog):
     assert result["verification"]["verification_score"] == 100.0
     assert result["audit_hash"]
 
+    analytics = client.get("/v1/analytics/summary", headers={"X-API-Key": api_key})
+    assert analytics.status_code == 200
+    assert analytics.json()["total_transactions"] >= 1
+    assert "USD" in analytics.json()["invoice_amount_totals_by_currency"]
+
     # The independent audit verifier must reproduce the exact persisted hash.
     chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
     assert chain.status_code == 200
