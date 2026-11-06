@@ -40,6 +40,22 @@ def _normalize_date(value):
 
 
 
+def classify_document(filename: str, text: str) -> str:
+    """Conservative rule-based category suggestion; users may override in a later workflow."""
+    sample = f"{filename} {text[:4000]}".casefold()
+    if any(term in sample for term in ("delivery note", "proof of delivery", "goods received note", "pod number")):
+        return "delivery_note"
+    if any(term in sample for term in ("purchase order", "purchase order no", "po number", "po #")):
+        return "purchase_order"
+    if any(term in sample for term in ("contract", "agreement", "terms and conditions")):
+        return "contract"
+    if any(term in sample for term in ("payment receipt", "remittance advice", "payment confirmation", "bank statement")):
+        return "payment_record"
+    if "invoice" in sample or "amount due" in sample:
+        return "invoice"
+    return "other"
+
+
 def inspect_document_integrity(data: bytes | str, content_type: str) -> dict:
     """Return conservative tampering-risk indicators, never an authenticity verdict."""
     signals = []
