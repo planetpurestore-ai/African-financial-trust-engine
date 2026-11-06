@@ -33,6 +33,19 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: python -m pytest -q
 
+      - name: Check operational dashboard JavaScript syntax
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("app/dashboard_operational.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, re.S)
+          if not scripts:
+              raise SystemExit("No inline dashboard scripts found")
+          Path("/tmp/aft-dashboard.js").write_text("\\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/aft-dashboard.js
+
       - name: Verify Alembic migration graph
         env:
           PYTHONPATH: ${{ github.workspace }}
