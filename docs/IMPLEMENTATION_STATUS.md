@@ -6,13 +6,13 @@ This register distinguishes code that exists from capabilities that have been in
 
 | # | Improvement | Current assessment |
 |---:|---|---|
-| 1 | Test the production application independently | **In progress** — production entrypoint tests are being expanded; CI is running on the hardening branch. |
+| 1 | Test the production application independently | **CI-tested** — production entrypoint tests pass in CI; live PostgreSQL/Render runtime validation remains pending. |
 | 2 | Database persistence and migrations | **Implemented in code; deployment validation pending** — PostgreSQL support and Alembic migrations exist. |
 | 3 | Organisation isolation | **Implemented in core queries; coverage needs expansion** — transaction, document, audit, and source queries are organisation-scoped. |
 | 4 | API authentication and key controls | **Partially implemented** — hashed keys, expiry, scopes, revocation and bootstrap provisioning exist; operational policy needs further review. |
 | 5 | Audit integrity | **Implemented in code; regression tests added** — hash-chain verification is being aligned with the writer and appends are serialized per organisation on PostgreSQL. |
 | 6 | Consistent error handling | **Partial implementation** — generic production exceptions return a safe 500 response with request ID and are logged; endpoint-specific error semantics and client guidance still need review. |
-| 7 | Automated production tests | **In progress** — production tests and CI are being repaired and expanded. |
+| 7 | Automated production tests | **CI-tested** — 55 automated tests passed on the latest validated code commit; the suite includes production API, security, review, resubmission, analytics and idempotency paths. |
 | 8 | Rate limiting | **Basic implementation** — fixed-window counters are stored in the shared database, with separate per-API-key and anonymous-IP limits; load testing and tuning remain. |
 | 9 | Structured application logging | **Partial implementation** — request method/path/status/duration and request ID are logged; bearer share tokens are redacted from paths. Central log shipping and alerting remain. |
 | 10 | Health monitoring | **Basic implementation** — database health endpoint and container health check exist; external uptime/alerting is not configured. |
@@ -104,7 +104,8 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Linked transaction resubmissions preserve original records and append supersession events to the audit chain.
 - Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, idempotency, rate limits, risk policies, human review, analytics and bulk transaction outcomes.
-- Clean-database Alembic upgrade validation in CI.
+- Clean-database Alembic upgrade validation in CI (all migrations through revision 0010).
+- Latest validated run: 55 tests passed; dashboard JavaScript syntax and migration-upgrade checks passed.
 
 External provider prerequisites and source-authority requirements are documented in `docs/EXTERNAL_INTEGRATION_READINESS.md`.
 
