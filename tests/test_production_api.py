@@ -116,6 +116,29 @@ def test_production_transaction_round_trip():
     assert trust_record.json()["record_version"] == "1.0"
     assert trust_record.json()["audit"]["event_hash"] == result["audit_hash"]
 
+    share = client.post(
+        f"/v1/transactions/{result['transaction_id']}/share-links",
+        headers={"X-API-Key": api_key},
+        json={"expires_in_hours": 2},
+    )
+    assert share.status_code == 201
+    share_path = share.json()["share_path"]
+    shared_record = client.get(share_path)
+    assert shared_record.status_code == 200
+    assert shared_record.json()["transaction_id"] == result["transaction_id"]
+    share_list = client.get(
+        f"/v1/transactions/{result['transaction_id']}/share-links",
+        headers={"X-API-Key": api_key},
+    )
+    assert share_list.status_code == 200
+    share_id = share.json()["share_id"]
+    revoked = client.post(
+        f"/v1/transactions/{result['transaction_id']}/share-links/{share_id}/revoke",
+        headers={"X-API-Key": api_key},
+    )
+    assert revoked.status_code == 200
+    assert client.get(share_path).status_code == 404
+
     # A customer-submitted record must never be able to self-declare as
     # independently verified, even if it supplies plausible provenance text.
     source = client.post(
