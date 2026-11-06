@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadF
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
-from sqlalchemy import select, desc, text
+from sqlalchemy import select, desc, text, func
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
@@ -382,7 +382,10 @@ def create_transaction(body: ProductionTransaction, response: Response, organiza
             return _transaction_response(existing, db)
     evidence_ids = [e.evidence_id for e in body.evidence]
     if len(evidence_ids) != len(set(evidence_ids)): raise HTTPException(422, "evidence_id values must be unique")
-    duplicate = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.invoice_number == body.invoice.invoice_number)) is not None
+    duplicate = db.scalar(select(Transaction).where(
+        Transaction.organization_id == organization.id,
+        func.lower(Transaction.invoice_number) == body.invoice.invoice_number.casefold(),
+    )) is not None
     risk_settings = _risk_settings_for_org(db, organization.id)
     verification = compare_invoice_to_evidence_set(body.invoice, body.evidence, policy=risk_settings)
     risk = assess(body.invoice, body.evidence, duplicate=duplicate, settings=risk_settings)
