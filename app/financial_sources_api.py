@@ -59,7 +59,6 @@ class FinancialSourceRecord(BaseModel):
     recipient: str | None = Field(default=None, max_length=255)
     occurred_at: datetime | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
-    authority: str = Field(default="provider_attested", pattern="^(provider_attested|independently_verified)$")
     provenance: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -70,10 +69,8 @@ def ingest_source_record(
     db: Session = Depends(__import__("app.production_api", fromlist=["db_session"]).db_session),
 ):
     ensure_source_tables(db)
-    if body.authority == "independently_verified":
-        verified = body.provenance.get("verification")
-        if verified != "provider_api_signature" and verified != "provider_direct_query":
-            raise HTTPException(422, "independently_verified requires provider_api_signature or provider_direct_query provenance")
+    # This endpoint is authenticated by an AFT customer API key, not by the
+    # financial provider. Client-supplied provenance cannot establish authority.
     canonical = json.dumps(body.payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     digest = hashlib.sha256(canonical).hexdigest()
     existing = db.execute(text("SELECT id, authority FROM external_financial_records WHERE organization_id=:o AND provider=:p AND provider_record_id=:r"), {"o": organization.id, "p": body.provider.strip().lower(), "r": body.provider_record_id}).mappings().first()
@@ -83,15 +80,15 @@ def ingest_source_record(
     db.execute(text("""INSERT INTO external_financial_records
         (id,organization_id,provider,authority,record_type,provider_record_id,reference,amount,currency,sender,recipient,occurred_at,raw_hash,payload_json,provenance_json)
         VALUES (:i,:o,:p,:a,:t,:r,:ref,:amt,:cur,:s,:rec,:dt,:h,:payload,:prov)"""), {
-        "i": rid, "o": organization.id, "p": body.provider.strip().lower(), "a": body.authority,
+        "i": rid, "o": organization.id, "p": body.provider.strip().lower(), "a": "unverified",
         "t": body.record_type, "r": body.provider_record_id, "ref": body.reference,
         "amt": body.amount, "cur": body.currency.upper() if body.currency else None,
         "s": body.sender, "rec": body.recipient, "dt": body.occurred_at, "h": digest,
         "payload": json.dumps(body.payload, sort_keys=True, default=str),
-        "prov": json.dumps(body.provenance, sort_keys=True, default=str),
+        "prov": json.dumps({"submission_channel": "authenticated_api_client", "caller_supplied": body.provenance}, sort_keys=True, default=str),
     })
     db.commit()
-    return {"record_id": rid, "duplicate": False, "authority": body.authority, "raw_hash": digest}
+    return {"record_id": rid, "duplicate": False, "authority": "unverified", "raw_hash": digest}
 
 
 @router.get("/records")
