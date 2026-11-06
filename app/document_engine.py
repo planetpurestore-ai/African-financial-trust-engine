@@ -49,19 +49,40 @@ def extract_fields(text: str) -> dict:
         r"(?:total\s*(?:due)?|amount\s*due|invoice\s*total)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
         r"(?:amount)\s*[:=]\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
     ], compact)
-    amount = None
-    if amount_raw:
+    def money_string(raw):
+        if not raw:
+            return None
         try:
             # Preserve decimal precision for financial amounts; floats can
             # silently round large values and fractions of a currency unit.
-            amount = format(Decimal(amount_raw.replace(",", "")), "f")
+            return format(Decimal(raw.replace(",", "")), "f")
         except (InvalidOperation, ValueError):
-            pass
+            return None
+
+    amount = money_string(amount_raw)
+    subtotal_raw = _first([
+        r"(?:sub\s*total|subtotal)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+    ], compact)
+    tax_raw = _first([
+        r"(?:tax(?:\s*amount)?|vat(?:\s*amount)?)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+    ], compact)
+    subtotal = money_string(subtotal_raw)
+    tax_amount = money_string(tax_raw)
     issue_raw = _first([r"(?:issue\s*date|invoice\s*date|date)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     due_raw = _first([r"(?:due\s*date|payment\s*due)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     issue = _normalize_date(issue_raw)
     due = _normalize_date(due_raw)
-    fields = {"invoice_number": invoice_number, "supplier_name": supplier_name, "buyer_name": buyer_name, "currency": currency, "amount": amount, "issue_date": issue, "due_date": due}
+    fields = {
+        "invoice_number": invoice_number,
+        "supplier_name": supplier_name,
+        "buyer_name": buyer_name,
+        "currency": currency,
+        "amount": amount,
+        "subtotal": subtotal,
+        "tax_amount": tax_amount,
+        "issue_date": issue,
+        "due_date": due,
+    }
     confidence = {k: (1.0 if v else 0.0) for k, v in fields.items()}
     required = ("invoice_number", "supplier_name", "buyer_name", "amount", "currency")
     missing_required = [k for k in required if not fields[k]]
