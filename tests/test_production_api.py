@@ -255,6 +255,19 @@ def test_production_transaction_round_trip(caplog):
     )
     assert conflict.status_code == 409
 
+    case_variant_payload = {
+        **payload,
+        "invoice": {**payload["invoice"], "invoice_number": invoice_number.casefold()},
+    }
+    duplicate = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"duplicate-{suffix}"},
+        json=case_variant_payload,
+    )
+    assert duplicate.status_code == 201
+    assert duplicate.json()["status"] == "rejected"
+    assert "duplicate_invoice_number" in duplicate.json()["verification"]["risk"]["flags"]
+
 
 def test_api_key_rate_limit(monkeypatch):
     monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
