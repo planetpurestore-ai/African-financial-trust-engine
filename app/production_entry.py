@@ -12,6 +12,7 @@ from app.bank_grade_controls import router as controls_router
 from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
 from app.payment_adapters import adapter_catalog
+from app.financial_sources_api import router as financial_sources_router
 
 app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.1", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
@@ -24,6 +25,7 @@ app.include_router(router)
 app.include_router(setup_router)
 app.include_router(bank_grade_router)
 app.include_router(controls_router)
+app.include_router(financial_sources_router)
 
 DASHBOARD = Path(__file__).with_name("dashboard_operational.html")
 LEGACY_DASHBOARD = Path(__file__).with_name("dashboard_v2.html")
