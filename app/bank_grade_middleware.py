@@ -19,6 +19,7 @@ def _required_scope(path, method):
     if path.startswith("/v1/documents"): return "documents:read" if method=="GET" else "documents:write"
     if path.startswith("/v1/transactions"): return "transactions:read" if method=="GET" else "transactions:write"
     if path.startswith("/v1/integrations"): return "integrations:read" if method=="GET" else "integrations:write"
+    if path.startswith("/v1/sources"): return "integrations:read" if method=="GET" else "integrations:write"
     return None
 
 def _expiry(value):
