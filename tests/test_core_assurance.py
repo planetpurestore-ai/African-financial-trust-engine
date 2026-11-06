@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.document_engine import extract_fields
+from app.document_engine import extract_fields, inspect_document_integrity
 from app.evidence import Evidence
 from app.models import Invoice
 from app.verification import compare_invoice_to_evidence_set
@@ -79,3 +79,22 @@ Issue Date: 15 September 2026"""
     assert result["arithmetic_consistent"] is False
     assert result["requires_review"] is True
     assert "subtotal_tax_total_mismatch" in result["review_reasons"]
+
+
+def test_pdf_integrity_signals_are_not_authenticity_proof():
+    result = inspect_document_integrity(
+        b"%PDF-1.4\\n/JavaScript (alert)\\n/EmbeddedFiles\\n%%EOF",
+        "application/pdf",
+    )
+    assert result["status"] == "review"
+    assert "pdf_embedded_script" in result["signals"]
+    assert "pdf_embedded_files" in result["signals"]
+    assert result["is_authenticity_proof"] is False
+
+
+def test_text_integrity_flags_bidirectional_override_controls():
+    result = inspect_document_integrity(
+        "Invoice: INV-1 " + chr(0x202E),
+        "text/plain",
+    )
+    assert "text_contains_bidirectional_override_controls" in result["signals"]
