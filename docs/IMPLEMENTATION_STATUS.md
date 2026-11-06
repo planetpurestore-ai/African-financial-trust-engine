@@ -56,7 +56,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 33 | Institutional dashboard | **Partial** — dashboard variants exist; role-based, institution-ready workflows need validation. |
 | 34 | Reviewer permissions | **Partial** — human review routes are restricted to admin-scoped keys; named users, reviewer roles and granular separation of duties remain. |
 | 35 | Institution-specific risk settings | **Basic implementation** — admin-only GET/PUT settings are persisted per organisation; reviewer roles, version history and maker-checker approval remain. |
-| 36 | API integration documentation | **Partial** — OpenAPI docs and API documentation exist; partner onboarding guides and examples need completion. |
+| 36 | API integration documentation | **Improved implementation** — institutional guide documents authentication, idempotency, transaction payloads, Trust Records, uploads, review/risk routes, source authority, errors and partner pilot controls; customer-specific onboarding still remains. |
 | 37 | API sandbox | **Not implemented** — a separate isolated sandbox environment and test data are required. |
 | 38 | Webhook notifications | **Partial** — signed inbound webhook intake and event deduplication exist; outbound notifications and retry handling remain. |
 | 39 | Bulk transaction processing | **Basic implementation** — batch endpoint accepts up to 50 transactions with per-item idempotency and partial outcomes; asynchronous jobs, progress polling and retry queues remain. |
