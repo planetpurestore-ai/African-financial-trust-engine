@@ -45,7 +45,7 @@ This register distinguishes code that exists from capabilities that have been in
 | 27 | Verification status tracking | **Basic implementation** — transaction status is stored and returned. |
 | 28 | Downloadable Trust Record | **Basic implementation** — a versioned JSON export includes submitted evidence, verification, audit hashes and limitations; PDF signing and external verification remain. |
 | 29 | Transaction history | **Implemented at API level** — organisation-scoped transaction listing exists. |
-| 30 | Correction/resubmission | **Not implemented** — immutable versioning and resubmission workflow remain. |
+| 30 | Correction/resubmission | **Basic implementation** — review-required/rejected records can be resubmitted as linked revisions; the original is retained, supersession is hash-chained, and active review queues exclude superseded versions. Field-level diffing and controlled correction reasons remain. |
 | 31 | Secure record sharing | **Basic implementation** — random token links expire, can be revoked, are stored hashed, and record access is counted; shared links are bearer credentials and need rate limiting/penetration testing. |
 | 32 | Mobile responsiveness | **Needs device testing** — no claim of complete mobile QA is made. |
 
@@ -101,6 +101,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
 - Delivery-note evidence type and explicit delivery-evidence presence reporting.
 - Bulk transaction intake endpoint with per-item idempotency and partial-success results.
+- Linked transaction resubmissions preserve original records and append supersession events to the audit chain.
 - Organisation-scoped analytics summary for statuses, review rates, submitted invoice totals and failed checks.
 - Regression tests for upload validation, audit verification, source authority, admin bootstrap, idempotency, rate limits, risk policies, human review, analytics and bulk transaction outcomes.
 - Clean-database Alembic upgrade validation in CI.
