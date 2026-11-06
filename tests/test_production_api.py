@@ -56,6 +56,19 @@ def test_production_transaction_round_trip(caplog):
     assert document.status_code == 201
     assert document.json()["duplicate"] is False
 
+    batch = client.post(
+        "/v1/documents/batch",
+        headers={"X-API-Key": api_key},
+        files=[
+            ("files", ("batch-note.txt", b"Invoice Number: DOC-1002", "text/plain")),
+            ("files", ("bad-image.png", b"not-an-image", "image/png")),
+        ],
+    )
+    assert batch.status_code == 200
+    assert batch.json()["count"] == 2
+    assert batch.json()["successful"] == 1
+    assert batch.json()["failed"] == 1
+
     payload = {
         "invoice": {
             "invoice_number": invoice_number,
