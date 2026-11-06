@@ -116,3 +116,50 @@ def test_delivery_note_is_reported_as_delivery_evidence_not_payment():
     )
     assert result["delivery_evidence_present"] is True
     assert result["payment_evidence_present"] is False
+
+
+def test_declared_purchase_order_reference_must_match_evidence():
+    invoice = Invoice(**make_invoice().model_dump(), purchase_order_number="PO-001")
+    result = compare_invoice_to_evidence_set(invoice, [make_po(), make_payment()])
+    assert result["status"] == "verified"
+    assert result["reference_checks"]["purchase_order_number"]["matched"] is True
+    assert result["supporting_evidence"]["purchase_order_number_match"] == ["PO-001"]
+
+
+def test_declared_purchase_order_reference_mismatch_requires_review():
+    invoice = Invoice(**make_invoice().model_dump(), purchase_order_number="PO-EXPECTED")
+    result = compare_invoice_to_evidence_set(invoice, [make_po(), make_payment()])
+    assert result["status"] == "review_required"
+    assert result["verification_score"] == 90.0
+    assert "purchase_order_number_match" in result["failed_checks"]
+
+
+def test_contract_and_delivery_references_are_matched_to_their_own_evidence_types():
+    invoice = Invoice(
+        **make_invoice().model_dump(),
+        contract_reference="CON-100",
+        delivery_reference="DEL-100",
+    )
+    contract = Evidence(
+        evidence_id="CON-EVIDENCE",
+        evidence_type="contract",
+        reference_number="CON-100",
+        supplier_name="Supplier Ltd",
+        buyer_name="Buyer Ltd",
+        amount=Decimal("10000.00"),
+        currency="USD",
+    )
+    delivery = Evidence(
+        evidence_id="DEL-EVIDENCE",
+        evidence_type="delivery_note",
+        reference_number="DEL-100",
+        supplier_name="Supplier Ltd",
+        buyer_name="Buyer Ltd",
+        amount=Decimal("10000.00"),
+        currency="USD",
+        evidence_date=date(2026, 1, 12),
+    )
+    result = compare_invoice_to_evidence_set(invoice, [make_po(), make_payment(), contract, delivery])
+    assert result["status"] == "verified"
+    assert result["reference_checks"]["contract_reference"]["matched"] is True
+    assert result["reference_checks"]["delivery_reference"]["matched"] is True
