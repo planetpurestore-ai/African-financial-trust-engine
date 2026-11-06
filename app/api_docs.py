@@ -14,7 +14,7 @@ def capabilities():
             "deterministic_document_intake", "pdf_text_extraction", "image_ocr_adapter",
             "financial_webhook_normalization", "event_deduplication", "financial_source_records",
             "source_reconciliation", "trust_record_export", "secure_share_links", "idempotency_payload_conflicts", "security_headers",
-            "bounded_document_uploads", "request_size_limits"
+            "bounded_document_uploads", "database_rate_limiting", "request_size_limits"
         ],
         "decisions": ["verified", "review_required", "rejected"],
         "partnership_dependent": [
