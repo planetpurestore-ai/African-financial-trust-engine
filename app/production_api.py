@@ -233,6 +233,35 @@ async def upload_document(file: UploadFile = File(...), organization: Organizati
     db.commit()
     return {"document_id": doc_id, "duplicate": False, "sha256": digest, "filename": filename, "extraction": extraction}
 
+@router.post("/documents/batch")
+async def upload_documents_batch(
+    files: list[UploadFile] = File(...),
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    """Upload up to ten documents with explicit per-file success/failure results."""
+    if not files or len(files) > 10:
+        raise HTTPException(422, "Submit between 1 and 10 documents per batch")
+    results = []
+    for file in files:
+        try:
+            result = await upload_document(file, organization, db)
+            results.append({"filename": file.filename, "success": True, "result": result})
+        except HTTPException as exc:
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "status_code": exc.status_code,
+                "error": exc.detail,
+            })
+    return {
+        "count": len(results),
+        "successful": sum(1 for item in results if item["success"]),
+        "failed": sum(1 for item in results if not item["success"]),
+        "results": results,
+    }
+
+
 @router.get("/documents")
 def list_documents(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
     limit = max(1, min(limit, 100)); rows = db.scalars(select(Document).where(Document.organization_id == organization.id).order_by(desc(Document.created_at)).limit(limit)).all()
