@@ -1,7 +1,8 @@
 from pathlib import Path
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy import text
 from app.production_db import SessionLocal
 from app.production_api import router
@@ -12,11 +13,12 @@ from app.bank_grade_controls import router as controls_router
 from app.bank_grade_middleware import bank_grade_security
 from app.security import request_size_guard, allowed_origins
 from app.payment_adapters import adapter_catalog
+from app.financial_sources_api import router as financial_sources_router
 
-app = FastAPI(title="African Financial Trust Trust Engine", version="2.4.1", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
+app = FastAPI(title="African Financial Trust Trust Engine", version="2.5.0", description="Production verification infrastructure for African commercial transactions.", docs_url="/docs", redoc_url="/redoc")
 origins = allowed_origins()
 if origins:
-    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key"])
+    app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"], allow_headers=["Content-Type", "X-API-Key", "X-Bootstrap-Token", "X-Organization-ID", "X-Webhook-Signature", "Idempotency-Key", "X-Request-ID"])
 app.middleware("http")(request_size_guard)
 app.middleware("http")(bank_grade_security)
 app.include_router(system_router)
@@ -24,6 +26,21 @@ app.include_router(router)
 app.include_router(setup_router)
 app.include_router(bank_grade_router)
 app.include_router(controls_router)
+app.include_router(financial_sources_router)
+
+
+@app.exception_handler(Exception)
+async def production_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", None)
+    logging.getLogger("aft.application").exception(
+        "unhandled_application_error",
+        extra={"request_id": request_id, "http_method": request.method, "http_path": request.url.path},
+    )
+    body = {"detail": "Internal server error"}
+    if request_id:
+        body["request_id"] = request_id
+    headers = {"X-Request-ID": request_id} if request_id else None
+    return JSONResponse(status_code=500, content=body, headers=headers)
 
 DASHBOARD = Path(__file__).with_name("dashboard_operational.html")
 LEGACY_DASHBOARD = Path(__file__).with_name("dashboard_v2.html")

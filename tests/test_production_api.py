@@ -12,10 +12,24 @@ from app.production_db import Base, engine
 
 Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
+# Production middleware expects this Alembic-managed policy table. Keep the
+# focused API test database self-contained instead of relying on a local DB.
+with engine.begin() as connection:
+    connection.exec_driver_sql("""
+        CREATE TABLE IF NOT EXISTS api_key_policies (
+            key_hash VARCHAR(128) PRIMARY KEY,
+            organization_id INTEGER NOT NULL,
+            expires_at TIMESTAMP,
+            scopes TEXT NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            last_used_at TIMESTAMP
+        )
+    """)
 client = TestClient(app)
 
 
-def test_production_transaction_round_trip():
+def test_production_transaction_round_trip(caplog):
+    caplog.set_level("INFO", logger="aft.request")
     suffix = uuid.uuid4().hex[:12]
     invoice_number = f"INV-{suffix}"
     idempotency_key = f"case-{suffix}"
@@ -26,6 +40,36 @@ def test_production_transaction_round_trip():
     )
     assert org_response.status_code == 201
     api_key = org_response.json()["api_key"]
+
+    # Upload validation rejects MIME spoofing and accepts small UTF-8 documents.
+    bad_image = client.post(
+        "/v1/documents",
+        headers={"X-API-Key": api_key},
+        files={"file": ("fake.png", b"not-a-png", "image/png")},
+    )
+    assert bad_image.status_code == 415
+    document = client.post(
+        "/v1/documents",
+        headers={"X-API-Key": api_key},
+        files={"file": ("invoice.txt", b"Invoice Number: DOC-1001\\nSupplier: Example Ltd", "text/plain")},
+    )
+    assert document.status_code == 201
+    assert document.json()["duplicate"] is False
+    assert document.json()["category"] == "invoice"
+
+    batch = client.post(
+        "/v1/documents/batch",
+        headers={"X-API-Key": api_key},
+        files=[
+            ("files", ("batch-note.txt", b"PO Number: PO-1002", "text/plain")),
+            ("files", ("bad-image.png", b"not-an-image", "image/png")),
+        ],
+    )
+    assert batch.status_code == 200
+    assert batch.json()["count"] == 2
+    assert batch.json()["successful"] == 1
+    assert batch.json()["failed"] == 1
+    assert batch.json()["results"][0]["result"]["category"] == "purchase_order"
 
     payload = {
         "invoice": {
@@ -73,6 +117,245 @@ def test_production_transaction_round_trip():
     assert result["verification"]["verification_score"] == 100.0
     assert result["audit_hash"]
 
+    analytics = client.get("/v1/analytics/summary", headers={"X-API-Key": api_key})
+    assert analytics.status_code == 200
+    assert analytics.json()["total_transactions"] >= 1
+    assert "USD" in analytics.json()["invoice_amount_totals_by_currency"]
+
+    # The independent audit verifier must reproduce the exact persisted hash.
+    chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
+    assert chain.status_code == 200
+    assert chain.json()["valid"] is True
+
+    trust_record = client.get(
+        f"/v1/transactions/{result['transaction_id']}/trust-record",
+        headers={"X-API-Key": api_key},
+    )
+    assert trust_record.status_code == 200
+    assert "attachment;" in trust_record.headers["content-disposition"]
+    assert trust_record.json()["record_type"] == "african_financial_trust.trust_record"
+    assert trust_record.json()["record_version"] == "1.0"
+    assert trust_record.json()["audit"]["event_hash"] == result["audit_hash"]
+
+    share = client.post(
+        f"/v1/transactions/{result['transaction_id']}/share-links",
+        headers={"X-API-Key": api_key},
+        json={"expires_in_hours": 2},
+    )
+    assert share.status_code == 201
+    share_path = share.json()["share_path"]
+    shared_record = client.get(share_path)
+    assert shared_record.status_code == 200
+    assert any(
+        getattr(record, "http_path", None) == "/v1/shared/trust-records/{token}"
+        for record in caplog.records
+    )
+    assert shared_record.json()["transaction_id"] == result["transaction_id"]
+    share_list = client.get(
+        f"/v1/transactions/{result['transaction_id']}/share-links",
+        headers={"X-API-Key": api_key},
+    )
+    assert share_list.status_code == 200
+    share_id = share.json()["share_id"]
+    revoked = client.post(
+        f"/v1/transactions/{result['transaction_id']}/share-links/{share_id}/revoke",
+        headers={"X-API-Key": api_key},
+    )
+    assert revoked.status_code == 200
+    assert client.get(share_path).status_code == 404
+
+    # A customer-submitted record must never be able to self-declare as
+    # independently verified, even if it supplies plausible provenance text.
+    source = client.post(
+        "/v1/sources/records",
+        headers={"X-API-Key": api_key},
+        json={
+            "provider": "example-bank",
+            "provider_record_id": f"bank-{suffix}",
+            "reference": invoice_number,
+            "amount": "12500.00",
+            "currency": "USD",
+            "authority": "independently_verified",
+            "provenance": {"verification": "provider_direct_query"},
+            "payload": {"amount": "12500.00", "currency": "USD"},
+        },
+    )
+    assert source.status_code == 201
+    assert source.json()["authority"] == "unverified"
+
+    # First admin scope must be provisioned with the deployment bootstrap secret.
+    key_list = client.get("/v1/keys", headers={"X-API-Key": api_key})
+    assert key_list.status_code == 200
+    key_id = key_list.json()["keys"][0]["id"]
+    risk_settings_denied = client.get("/v1/risk-settings", headers={"X-API-Key": api_key})
+    assert risk_settings_denied.status_code == 403
+    denied = client.post(
+        f"/v1/bank-grade/controls/bootstrap/{key_id}",
+        headers={"X-Bootstrap-Token": "wrong-token"},
+    )
+    assert denied.status_code == 403
+    provisioned = client.post(
+        f"/v1/bank-grade/controls/bootstrap/{key_id}",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+    )
+    assert provisioned.status_code == 200
+    assert "bank-grade:admin" in provisioned.json()["scopes"]
+
+    default_policy = client.get("/v1/risk-settings", headers={"X-API-Key": api_key})
+    assert default_policy.status_code == 200
+    assert default_policy.json()["settings"]["require_payment_evidence"] is True
+    policy_update = client.put(
+        "/v1/risk-settings",
+        headers={"X-API-Key": api_key},
+        json={"require_payment_evidence": False, "manual_review_amount_threshold": "50000.00"},
+    )
+    assert policy_update.status_code == 200
+    assert policy_update.json()["settings"]["require_payment_evidence"] is False
+
+    # A single matching commercial record is acceptable only because this
+    # institution explicitly configured payment evidence as optional.
+    policy_invoice_number = f"POLICY-{suffix}"
+    policy_transaction = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"policy-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": policy_invoice_number,
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "7500.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [{
+                "evidence_id": f"PO-POLICY-{suffix}",
+                "evidence_type": "purchase_order",
+                "reference_number": f"PO-POLICY-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "7500.00",
+                "currency": "USD",
+            }],
+        },
+    )
+    assert policy_transaction.status_code == 201
+    assert policy_transaction.json()["status"] == "verified"
+    assert policy_transaction.json()["verification"]["policy_applied"]["require_payment_evidence"] is False
+
+    # Restore the default evidence requirement and exercise the human review queue.
+    restored_policy = client.put(
+        "/v1/risk-settings",
+        headers={"X-API-Key": api_key},
+        json={"require_payment_evidence": True},
+    )
+    assert restored_policy.status_code == 200
+    review_transaction = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"review-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": f"REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [{
+                "evidence_id": f"PO-REVIEW-{suffix}",
+                "evidence_type": "purchase_order",
+                "reference_number": f"PO-REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+            }],
+        },
+    )
+    assert review_transaction.status_code == 201
+    review_tx_id = review_transaction.json()["transaction_id"]
+    assert review_transaction.json()["status"] == "review_required"
+    review_queue = client.get("/v1/reviews", headers={"X-API-Key": api_key})
+    assert review_queue.status_code == 200
+    assert any(item["transaction_id"] == review_tx_id for item in review_queue.json()["reviews"])
+    human_decision = client.post(
+        f"/v1/reviews/{review_tx_id}/decision",
+        headers={"X-API-Key": api_key},
+        json={
+            "decision": "accepted_for_further_processing",
+            "reason": "Counterparty confirmation received by authorised reviewer.",
+        },
+    )
+    assert human_decision.status_code == 201
+    assert human_decision.json()["machine_status"] == "review_required"
+    review_history = client.get(f"/v1/reviews/{review_tx_id}", headers={"X-API-Key": api_key})
+    assert review_history.status_code == 200
+    assert len(review_history.json()["review_history"]) == 1
+    reviewed_record = client.get(
+        f"/v1/transactions/{review_tx_id}/trust-record",
+        headers={"X-API-Key": api_key},
+    )
+    assert reviewed_record.json()["human_review"]["decision"] == "accepted_for_further_processing"
+
+    resubmitted = client.post(
+        f"/v1/transactions/{review_tx_id}/resubmit",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"resubmit-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": f"REVIEW-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "4200.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [
+                {
+                    "evidence_id": f"PO-REVIEW-{suffix}",
+                    "evidence_type": "purchase_order",
+                    "reference_number": f"PO-REVIEW-{suffix}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": "4200.00",
+                    "currency": "USD",
+                },
+                {
+                    "evidence_id": f"PAY-REVIEW-{suffix}",
+                    "evidence_type": "payment_record",
+                    "reference_number": f"PAY-REVIEW-{suffix}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": "4200.00",
+                    "currency": "USD",
+                },
+            ],
+        },
+    )
+    assert resubmitted.status_code == 201
+    replacement_id = resubmitted.json()["transaction_id"]
+    assert resubmitted.json()["status"] == "verified"
+    assert resubmitted.json()["revision_of"] == review_tx_id
+    original_after_resubmit = client.get(
+        f"/v1/transactions/{review_tx_id}",
+        headers={"X-API-Key": api_key},
+    )
+    assert original_after_resubmit.json()["superseded_by_transaction_id"] == replacement_id
+    revision_history = client.get(
+        f"/v1/transactions/{review_tx_id}/revisions",
+        headers={"X-API-Key": api_key},
+    )
+    assert revision_history.status_code == 200
+    assert revision_history.json()["count"] == 2
+    active_review_queue = client.get("/v1/reviews", headers={"X-API-Key": api_key})
+    assert all(item["transaction_id"] != review_tx_id for item in active_review_queue.json()["reviews"])
+
+    reviewed_chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
+    assert reviewed_chain.status_code == 200
+    assert reviewed_chain.json()["valid"] is True
+
     repeat = client.post(
         "/v1/transactions",
         headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
@@ -80,3 +363,106 @@ def test_production_transaction_round_trip():
     )
     assert repeat.status_code == 200
     assert repeat.json()["transaction_id"] == result["transaction_id"]
+
+    changed_payload = {
+        **payload,
+        "invoice": {**payload["invoice"], "amount": "13000.00"},
+    }
+    conflict = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
+        json=changed_payload,
+    )
+    assert conflict.status_code == 409
+
+    case_variant_payload = {
+        **payload,
+        "invoice": {**payload["invoice"], "invoice_number": invoice_number.casefold()},
+    }
+    duplicate = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"duplicate-{suffix}"},
+        json=case_variant_payload,
+    )
+    assert duplicate.status_code == 201
+    assert duplicate.json()["status"] == "rejected"
+    assert "duplicate_invoice_number" in duplicate.json()["verification"]["risk"]["flags"]
+
+
+def test_api_key_rate_limit(monkeypatch):
+    monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
+    suffix = uuid.uuid4().hex[:8]
+    org_response = client.post(
+        "/v1/organizations",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+        json={"name": f"Rate Limit Test {suffix}"},
+    )
+    assert org_response.status_code == 201
+    api_key = org_response.json()["api_key"]
+    headers = {"X-API-Key": api_key}
+
+    first = client.get("/v1/transactions", headers=headers)
+    second = client.get("/v1/transactions", headers=headers)
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert int(second.headers["retry-after"]) >= 1
+
+
+def test_bulk_transaction_batch_reports_per_item_idempotency_results():
+    suffix = uuid.uuid4().hex[:8]
+    org_response = client.post(
+        "/v1/organizations",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+        json={"name": f"Bulk Test {suffix}"},
+    )
+    assert org_response.status_code == 201
+    api_key = org_response.json()["api_key"]
+
+    def transaction_payload(invoice_number, amount):
+        return {
+            "invoice": {
+                "invoice_number": invoice_number,
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": amount,
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [
+                {
+                    "evidence_id": f"PO-{invoice_number}",
+                    "evidence_type": "purchase_order",
+                    "reference_number": f"PO-{invoice_number}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": amount,
+                    "currency": "USD",
+                },
+                {
+                    "evidence_id": f"PAY-{invoice_number}",
+                    "evidence_type": "payment_record",
+                    "reference_number": f"PAY-{invoice_number}",
+                    "supplier_name": "Supplier Ltd",
+                    "buyer_name": "Buyer Ltd",
+                    "amount": amount,
+                    "currency": "USD",
+                },
+            ],
+        }
+
+    response = client.post(
+        "/v1/transactions/batch",
+        headers={"X-API-Key": api_key},
+        json={
+            "items": [
+                {"idempotency_key": f"bulk-{suffix}", "transaction": transaction_payload(f"BULK-{suffix}", "1000.00")},
+                {"idempotency_key": f"bulk-{suffix}", "transaction": transaction_payload(f"BULK-{suffix}-2", "2000.00")},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["successful"] == 1
+    assert response.json()["failed"] == 1
+    assert response.json()["results"][0]["status_code"] == 201
+    assert response.json()["results"][1]["status_code"] == 409

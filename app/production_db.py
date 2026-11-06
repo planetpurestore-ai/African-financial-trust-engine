@@ -42,6 +42,13 @@ class Organization(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     api_keys = relationship("ApiKey", back_populates="organization", cascade="all, delete-orphan")
 
+class OrganizationRiskSettings(Base):
+    __tablename__ = "organization_risk_settings"
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True)
+    settings_json: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -60,6 +67,8 @@ class Transaction(Base):
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="received", nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revision_of: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    superseded_by_transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "idempotency_key", name="uq_transaction_idempotency"),)
 
@@ -81,10 +90,22 @@ class Document(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="other")
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     extraction_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+class ReviewDecision(Base):
+    __tablename__ = "review_decisions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    transaction_id: Mapped[str] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True)
+    reviewer_api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id", ondelete="RESTRICT"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
 
 class IntegrationCredential(Base):
     __tablename__ = "integration_credentials"
@@ -95,6 +116,13 @@ class IntegrationCredential(Base):
     active: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     __table_args__ = (UniqueConstraint("organization_id", "provider", name="uq_integration_credential"),)
+
+class ApiRateLimit(Base):
+    __tablename__ = "api_rate_limits"
+    bucket_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    window_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
 
 class IntegrationEvent(Base):
     __tablename__ = "integration_events"

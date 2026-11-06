@@ -39,6 +39,64 @@ def _normalize_date(value):
     return value
 
 
+
+def classify_document(filename: str, text: str) -> str:
+    """Conservative rule-based category suggestion; users may override in a later workflow."""
+    sample = f"{filename} {text[:4000]}".casefold()
+    if any(term in sample for term in ("delivery note", "proof of delivery", "goods received note", "pod number")):
+        return "delivery_note"
+    if any(term in sample for term in ("purchase order", "purchase order no", "po number", "po #")):
+        return "purchase_order"
+    if any(term in sample for term in ("contract", "agreement", "terms and conditions")):
+        return "contract"
+    if any(term in sample for term in ("payment receipt", "remittance advice", "payment confirmation", "bank statement")):
+        return "payment_record"
+    if "invoice" in sample or "amount due" in sample:
+        return "invoice"
+    return "other"
+
+
+def inspect_document_integrity(data: bytes | str, content_type: str) -> dict:
+    """Return conservative tampering-risk indicators, never an authenticity verdict."""
+    signals = []
+    if content_type == "application/pdf":
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        if data.count(b"%%EOF") > 1:
+            signals.append("multiple_pdf_revision_markers")
+        if re.search(rb"/(?:JavaScript|JS)\b", data):
+            signals.append("pdf_embedded_script")
+        if b"/EmbeddedFiles" in data:
+            signals.append("pdf_embedded_files")
+        if b"/OpenAction" in data or re.search(rb"/AA\b", data):
+            signals.append("pdf_active_action")
+        if b"/Encrypt" in data:
+            signals.append("pdf_encrypted_document")
+        if b"/ByteRange" in data and b"/Contents" in data:
+            signals.append("pdf_signature_field_present_but_not_cryptographically_verified")
+    elif content_type.startswith("text/"):
+        if isinstance(data, bytes):
+            if bytes([0]) in data:
+                signals.append("text_contains_null_bytes")
+            try:
+                decoded = data.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded = ""
+                signals.append("text_encoding_is_not_utf8")
+        else:
+            decoded = data
+            if chr(0) in decoded:
+                signals.append("text_contains_null_bytes")
+        if any(0x202A <= ord(char) <= 0x202E or 0x2066 <= ord(char) <= 0x2069 for char in decoded):
+            signals.append("text_contains_bidirectional_override_controls")
+    return {
+        "status": "review" if signals else "no_obvious_anomaly",
+        "signals": signals,
+        "is_authenticity_proof": False,
+        "limitations": "Heuristic file-integrity indicators only; they do not establish issuer identity, signature validity, or transaction truth.",
+    }
+
+
 def extract_fields(text: str) -> dict:
     compact = re.sub(r"[ \t]+", " ", text)
     invoice_number = _first([r"(?:invoice\s*(?:no|number|#)|inv\.?\s*#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{1,})"], compact)
@@ -46,29 +104,62 @@ def extract_fields(text: str) -> dict:
     buyer_name = _first([r"(?:buyer|customer|bill\s*to)\s*[:=]\s*([^\n\r]+)", r"(?:to)\s*[:=]\s*([^\n\r]+)"], text)
     currency = _first([r"\b(USD|EUR|GBP|RWF|KES|UGX|TZS|ZAR|GHS|NGN|XOF|XAF)\b"], compact)
     amount_raw = _first([
-        r"(?:total\s*(?:due)?|amount\s*due|invoice\s*total)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
-        r"(?:amount)\s*[:=]\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+        r"^\s*(?:invoice\s+total|total(?:\s+due)?|amount\s+due)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+        r"^\s*amount\s*[:=]\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
     ], compact)
-    amount = None
-    if amount_raw:
+    def money_string(raw):
+        if not raw:
+            return None
         try:
-            amount = float(Decimal(amount_raw.replace(",", "")))
+            # Preserve decimal precision for financial amounts; floats can
+            # silently round large values and fractions of a currency unit.
+            return format(Decimal(raw.replace(",", "")), "f")
         except (InvalidOperation, ValueError):
-            pass
+            return None
+
+    amount = money_string(amount_raw)
+    subtotal_raw = _first([
+        r"(?:sub\s*total|subtotal)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+    ], compact)
+    tax_raw = _first([
+        r"(?:tax\s*amount|vat\s*amount|total\s*tax|total\s*vat)\s*[:=]?\s*(?:[A-Z]{3}\s*)?([0-9][0-9,]*(?:\.\d{1,2})?)",
+    ], compact)
+    subtotal = money_string(subtotal_raw)
+    tax_amount = money_string(tax_raw)
     issue_raw = _first([r"(?:issue\s*date|invoice\s*date|date)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     due_raw = _first([r"(?:due\s*date|payment\s*due)\s*[:=]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4}|[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}|[0-9]{1,2}-[0-9]{1,2}-[0-9]{4})"], text)
     issue = _normalize_date(issue_raw)
     due = _normalize_date(due_raw)
-    fields = {"invoice_number": invoice_number, "supplier_name": supplier_name, "buyer_name": buyer_name, "currency": currency, "amount": amount, "issue_date": issue, "due_date": due}
+    fields = {
+        "invoice_number": invoice_number,
+        "supplier_name": supplier_name,
+        "buyer_name": buyer_name,
+        "currency": currency,
+        "amount": amount,
+        "subtotal": subtotal,
+        "tax_amount": tax_amount,
+        "issue_date": issue,
+        "due_date": due,
+    }
     confidence = {k: (1.0 if v else 0.0) for k, v in fields.items()}
     required = ("invoice_number", "supplier_name", "buyer_name", "amount", "currency")
     missing_required = [k for k in required if not fields[k]]
+    arithmetic_consistent = None
+    review_reasons = [f"missing_required_field:{name}" for name in missing_required]
+    if subtotal is not None and tax_amount is not None and amount is not None:
+        arithmetic_consistent = (
+            Decimal(subtotal) + Decimal(tax_amount) == Decimal(amount)
+        )
+        if not arithmetic_consistent:
+            review_reasons.append("subtotal_tax_total_mismatch")
     return {
         **fields,
         "fields": fields,
         "confidence": confidence,
         "confidence_basis": "field_presence_only; not an OCR/model truth probability",
-        "requires_review": bool(missing_required),
+        "arithmetic_consistent": arithmetic_consistent,
+        "requires_review": bool(review_reasons),
+        "review_reasons": review_reasons,
         "missing_required_fields": missing_required,
         "text_length": len(text),
     }

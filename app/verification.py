@@ -35,7 +35,11 @@ def _checks_for_evidence(invoice: Invoice, evidence: Evidence) -> dict[str, bool
     }
 
 
-def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_items: list[Evidence] | None = None) -> dict:
+def _aggregate(
+    checks_by_evidence: dict[str, dict[str, bool | None]],
+    evidence_items: list[Evidence] | None = None,
+    policy: dict | None = None,
+) -> dict:
     checks: dict[str, bool] = {}
     conflicts: list[str] = []
     incomplete_checks: list[str] = []
@@ -55,9 +59,25 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
     passed = sum(checks.values())
     core_score = sum(CHECK_WEIGHTS[name] for name, value in checks.items() if value)
 
+    policy = policy or {"require_commercial_evidence": True, "require_payment_evidence": True}
+    require_commercial = bool(policy.get("require_commercial_evidence", True))
+    require_payment = bool(policy.get("require_payment_evidence", True))
     items = evidence_items or []
-    has_commercial = any(e.evidence_type in {"purchase_order", "contract"} for e in items)
-    has_payment = any(e.evidence_type == "payment_record" for e in items)
+    has_commercial = any(
+        e.evidence_type in {"purchase_order", "contract"}
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency))
+        for e in items
+    )
+    has_payment = any(
+        e.evidence_type == "payment_record"
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency))
+        for e in items
+    )
+    has_delivery = any(
+        e.evidence_type == "delivery_note"
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency, e.evidence_date))
+        for e in items
+    )
 
     verification_score = core_score
     if has_commercial:
@@ -72,15 +92,15 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
 
     hard_conflict = bool(conflicts)
     complete_core_checks = passed == len(CHECK_NAMES) and not incomplete_checks and not hard_conflict
-    evidence_complete = has_commercial and has_payment
+    evidence_complete = (has_commercial or not require_commercial) and (has_payment or not require_payment)
     verified = complete_core_checks and evidence_complete
     status = "verified" if verified else "review_required"
 
     failed_checks = [name for name, value in checks.items() if not value]
     failed_checks.extend(f"conflict:{name}" for name in conflicts)
-    if not has_commercial:
+    if not has_commercial and require_commercial:
         failed_checks.append("missing_commercial_evidence")
-    if not has_payment:
+    if not has_payment and require_payment:
         failed_checks.append("missing_payment_evidence")
 
     return {
@@ -96,13 +116,62 @@ def _aggregate(checks_by_evidence: dict[str, dict[str, bool | None]], evidence_i
         "supporting_evidence": supporting_evidence,
         "commercial_evidence_present": has_commercial,
         "payment_evidence_present": has_payment,
+        "delivery_evidence_present": has_delivery,
+        "policy_applied": {
+            "require_commercial_evidence": require_commercial,
+            "require_payment_evidence": require_payment,
+        },
     }
 
 
-def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence) -> dict:
-    return _aggregate({evidence.evidence_id: _checks_for_evidence(invoice, evidence)}, [evidence])
+def _apply_reference_checks(result: dict, invoice: Invoice, evidence_items: list[Evidence]) -> dict:
+    reference_rules = (
+        ("purchase_order_number", "purchase_order"),
+        ("contract_reference", "contract"),
+        ("delivery_reference", "delivery_note"),
+    )
+    reference_checks = {}
+    for invoice_field, evidence_type in reference_rules:
+        expected = getattr(invoice, invoice_field, None)
+        if not expected:
+            continue
+        matches = [
+            item.evidence_id
+            for item in evidence_items
+            if item.evidence_type == evidence_type
+            and _normalize_text(item.reference_number) == _normalize_text(expected)
+        ]
+        matched = bool(matches)
+        check_name = f"{invoice_field}_match"
+        result["checks"][check_name] = matched
+        result["supporting_evidence"][check_name] = matches
+        result["total_checks"] += 1
+        if matched:
+            result["passed_checks"] += 1
+        else:
+            result["failed_checks"].append(check_name)
+            result["verification_score"] = round(max(0.0, result["verification_score"] - 10.0), 2)
+            result["status"] = "review_required"
+        reference_checks[invoice_field] = {
+            "expected_reference": expected,
+            "evidence_type": evidence_type,
+            "matched": matched,
+            "matching_evidence_ids": matches,
+        }
+    result["reference_checks"] = reference_checks
+    return result
 
 
-def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence]) -> dict:
+def compare_invoice_to_evidence(invoice: Invoice, evidence: Evidence, policy: dict | None = None) -> dict:
+    result = _aggregate(
+        {evidence.evidence_id: _checks_for_evidence(invoice, evidence)},
+        [evidence],
+        policy,
+    )
+    return _apply_reference_checks(result, invoice, [evidence])
+
+
+def compare_invoice_to_evidence_set(invoice: Invoice, evidence_items: list[Evidence], policy: dict | None = None) -> dict:
     checks_by_evidence = {item.evidence_id: _checks_for_evidence(invoice, item) for item in evidence_items}
-    return _aggregate(checks_by_evidence, evidence_items)
+    result = _aggregate(checks_by_evidence, evidence_items, policy)
+    return _apply_reference_checks(result, invoice, evidence_items)
