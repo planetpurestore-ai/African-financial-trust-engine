@@ -52,13 +52,15 @@ def test_missing_payment_does_not_claim_truth():
 
 
 def test_document_extraction_is_explicitly_field_based():
-    text = "Invoice Number: INV-9\nSupplier: Supplier Ltd\nBuyer: Buyer Ltd\nCurrency: USD\nAmount: 1500.00\nIssue Date: 15 September 2026\nDue Date: 15 October 2026"
+    text = "Invoice Number: INV-9\nSupplier: Supplier Ltd\nBuyer: Buyer Ltd\nCurrency: USD\nSubtotal: 1200.00\nTax: 300.00\nAmount: 1500.00\nIssue Date: 15 September 2026\nDue Date: 15 October 2026"
     result = extract_fields(text)
     assert result["fields"]["invoice_number"] == "INV-9"
     assert result["fields"]["supplier_name"] == "Supplier Ltd"
     assert result["fields"]["buyer_name"] == "Buyer Ltd"
     assert result["fields"]["currency"] == "USD"
     assert result["fields"]["amount"] == "1500.00"
+    assert result["fields"]["subtotal"] == "1200.00"
+    assert result["fields"]["tax_amount"] == "300.00"
     assert result["fields"]["issue_date"] == "2026-09-15"
     assert result["fields"]["due_date"] == "2026-10-15"
     assert "confidence" in result
