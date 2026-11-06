@@ -69,6 +69,7 @@ def test_production_transaction_round_trip(caplog):
     assert batch.json()["count"] == 2
     assert batch.json()["successful"] == 1
     assert batch.json()["failed"] == 1
+    assert batch.json()["results"][0]["result"]["category"] == "purchase_order"
 
     payload = {
         "invoice": {
