@@ -5,14 +5,15 @@ import secrets
 import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
 from datetime import datetime, timedelta, timezone
-from pydantic import BaseModel, Field
+from decimal import Decimal
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select, desc, text
 from sqlalchemy.orm import Session
 from app.models import Invoice
 from app.evidence import Evidence
 from app.verification import compare_invoice_to_evidence_set
-from app.risk_engine import assess
-from app.production_db import SessionLocal, Organization, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
+from app.risk_engine import assess, DEFAULT_RISK_SETTINGS
+from app.production_db import SessionLocal, Organization, OrganizationRiskSettings, ApiKey, Transaction, AuditEvent, Document, IntegrationCredential, IntegrationEvent
 from app.document_engine import sha256_bytes, extract_pdf_text, extract_fields
 from app.integrations import image_ocr, OCRProviderError, verify_webhook_signature, normalize_financial_event, webhook_secret_for
 
@@ -57,6 +58,56 @@ class KeyCreate(BaseModel):
 
 class ShareLinkCreate(BaseModel):
     expires_in_hours: int = Field(default=72, ge=1, le=720)
+
+class RiskSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    require_commercial_evidence: bool | None = None
+    require_payment_evidence: bool | None = None
+    reject_duplicate_invoice: bool | None = None
+    reject_payment_mismatch: bool | None = None
+    reject_counterparty_conflict: bool | None = None
+    manual_review_amount_threshold: Decimal | None = Field(default=None, ge=0)
+
+
+def _risk_settings_for_org(db: Session, organization_id: int) -> dict:
+    row = db.get(OrganizationRiskSettings, organization_id)
+    if not row:
+        return dict(DEFAULT_RISK_SETTINGS)
+    try:
+        stored = json.loads(row.settings_json or "{}")
+    except (TypeError, json.JSONDecodeError):
+        stored = {}
+    return {**DEFAULT_RISK_SETTINGS, **stored}
+
+
+@router.get("/risk-settings")
+def get_risk_settings(
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    return {"settings": _risk_settings_for_org(db, organization.id)}
+
+
+@router.put("/risk-settings")
+def update_risk_settings(
+    body: RiskSettingsUpdate,
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+):
+    settings = _risk_settings_for_org(db, organization.id)
+    settings.update(body.model_dump(mode="json", exclude_unset=True))
+    row = db.get(OrganizationRiskSettings, organization.id)
+    if row:
+        row.settings_json = json.dumps(settings, sort_keys=True)
+        row.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(OrganizationRiskSettings(
+            organization_id=organization.id,
+            settings_json=json.dumps(settings, sort_keys=True),
+            updated_at=datetime.now(timezone.utc),
+        ))
+    db.commit()
+    return {"settings": settings, "updated": True}
 
 
 def _share_token_hash(token: str) -> str:
@@ -324,7 +375,9 @@ def create_transaction(body: ProductionTransaction, response: Response, organiza
     evidence_ids = [e.evidence_id for e in body.evidence]
     if len(evidence_ids) != len(set(evidence_ids)): raise HTTPException(422, "evidence_id values must be unique")
     duplicate = db.scalar(select(Transaction).where(Transaction.organization_id == organization.id, Transaction.invoice_number == body.invoice.invoice_number)) is not None
-    verification = compare_invoice_to_evidence_set(body.invoice, body.evidence); risk = assess(body.invoice, body.evidence, duplicate=duplicate)
+    risk_settings = _risk_settings_for_org(db, organization.id)
+    verification = compare_invoice_to_evidence_set(body.invoice, body.evidence, policy=risk_settings)
+    risk = assess(body.invoice, body.evidence, duplicate=duplicate, settings=risk_settings)
     decision = "verified" if verification["status"] == "verified" and risk["decision"] == "approve" else ("rejected" if risk["decision"] == "reject" else "review_required"); verification["risk"] = risk
     tx = Transaction(id=uuid.uuid4().hex, organization_id=organization.id, invoice_number=body.invoice.invoice_number, payload=json.dumps(body.model_dump(mode="json")), status=decision, idempotency_key=idempotency_key); db.add(tx); db.flush()
     previous = db.scalar(select(AuditEvent).where(AuditEvent.organization_id == organization.id).order_by(desc(AuditEvent.id))); previous_hash = previous.event_hash if previous else "0" * 64
