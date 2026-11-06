@@ -95,6 +95,7 @@ The working branch `aft/production-hardening-2026-11` contains:
 - Per-organisation risk settings with admin-only policy updates and policy-aware verification decisions.
 - Admin-scoped human review queue and reasoned review decisions appended to the audit hash chain without rewriting machine outcomes.
 - Multi-document upload endpoint with per-file partial-success reporting.
+- Operational dashboard supports multi-file upload progress and reports per-file outcomes.
 - Exact-decimal subtotal/tax/total validation and extraction fields.
 - Conservative PDF/text integrity anomaly indicators attached to document extraction results.
 - Persisted rule-based document categories for invoice, PO, contract, payment and delivery-note files.
