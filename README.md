@@ -76,6 +76,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 `GET /audits/{invoice_number}?limit=50`
 
+### Document upload
+
+`POST /v1/documents` accepts one PDF, supported image, or UTF-8 text/CSV file. `POST /v1/documents/batch` accepts up to ten files and returns an outcome for each file; partial success is explicit and each file is subject to the upload-size and content checks.
+
 ### Download and securely share a Trust Record
 
 `GET /v1/transactions/{transaction_id}/trust-record` returns a versioned JSON export containing the submitted invoice/evidence, verification result, audit hashes and limitations.
