@@ -259,6 +259,53 @@ def get_transaction(transaction_id: str, organization: Organization = Depends(re
     if not tx: raise HTTPException(404, "Transaction not found")
     return _transaction_response(tx, db)
 
+@router.get("/transactions/{transaction_id}/trust-record")
+def download_trust_record(transaction_id: str, organization: Organization = Depends(require_api_key), db: Session = Depends(db_session)):
+    """Download a versioned, auditable JSON record for an organisation's transaction."""
+    tx = db.scalar(select(Transaction).where(Transaction.id == transaction_id, Transaction.organization_id == organization.id))
+    if not tx:
+        raise HTTPException(404, "Transaction not found")
+    audit = db.scalar(select(AuditEvent).where(
+        AuditEvent.transaction_id == tx.id,
+        AuditEvent.organization_id == organization.id,
+    ).order_by(desc(AuditEvent.id)))
+    try:
+        payload = json.loads(tx.payload or "{}")
+        invoice = payload.get("invoice") or {}
+        evidence = payload.get("evidence") or []
+    except (TypeError, json.JSONDecodeError):
+        raise HTTPException(500, "Stored transaction payload could not be read")
+    record = {
+        "record_type": "african_financial_trust.trust_record",
+        "record_version": "1.0",
+        "issuer": "African Financial Trust",
+        "transaction_id": tx.id,
+        "invoice_number": tx.invoice_number,
+        "status": tx.status,
+        "invoice": invoice,
+        "evidence_submitted": evidence,
+        "verification": json.loads(audit.result_json) if audit else None,
+        "audit": {
+            "audit_id": audit.id if audit else None,
+            "previous_hash": audit.previous_hash if audit else None,
+            "event_hash": audit.event_hash if audit else None,
+            "created_at": audit.created_at.isoformat() if audit else None,
+        },
+        "created_at": tx.created_at.isoformat(),
+        "limitations": [
+            "This record reports checks performed on evidence submitted to the Trust Engine.",
+            "It is not a lending decision, credit rating, guarantee, or proof that an underlying transaction is genuine.",
+            "External source authority is only established when an authorised provider integration independently verifies the source.",
+        ],
+    }
+    filename = f"aft-trust-record-{tx.id}.json"
+    return Response(
+        content=json.dumps(record, sort_keys=True, indent=2, default=str),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/transactions")
 def list_transactions(organization: Organization = Depends(require_api_key), db: Session = Depends(db_session), limit: int = 50):
     limit = max(1, min(limit, 100)); rows = db.scalars(select(Transaction).where(Transaction.organization_id == organization.id).order_by(desc(Transaction.created_at)).limit(limit)).all()
