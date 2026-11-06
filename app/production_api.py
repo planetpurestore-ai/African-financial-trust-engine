@@ -3,8 +3,9 @@ import json
 import os
 import secrets
 import uuid
+from collections import Counter
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, File, Request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -768,6 +769,72 @@ def record_review_decision(
         "reason": body.reason,
         "audit_hash": event_hash,
         "created_at": created_at.isoformat(),
+    }
+
+
+@router.get("/analytics/summary")
+def analytics_summary(
+    organization: Organization = Depends(require_api_key),
+    db: Session = Depends(db_session),
+    from_date: date | None = None,
+    to_date: date | None = None,
+):
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(422, "from_date cannot be after to_date")
+    statement = select(Transaction).where(Transaction.organization_id == organization.id)
+    if from_date:
+        statement = statement.where(Transaction.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc))
+    if to_date:
+        statement = statement.where(Transaction.created_at < datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc))
+    rows = db.scalars(statement.order_by(desc(Transaction.created_at)).limit(5001)).all()
+    truncated = len(rows) > 5000
+    rows = rows[:5000]
+    status_counts = Counter(tx.status for tx in rows)
+    amounts: dict[str, Decimal] = {}
+    failed_checks = Counter()
+    transaction_ids = [tx.id for tx in rows]
+    if transaction_ids:
+        audits = db.scalars(select(AuditEvent).where(
+            AuditEvent.organization_id == organization.id,
+            AuditEvent.transaction_id.in_(transaction_ids),
+            ~AuditEvent.decision.startswith("manual_review:"),
+        ).order_by(desc(AuditEvent.id))).all()
+        seen = set()
+        for audit in audits:
+            if audit.transaction_id in seen:
+                continue
+            seen.add(audit.transaction_id)
+            try:
+                result = json.loads(audit.result_json or "{}")
+            except json.JSONDecodeError:
+                result = {}
+            failed_checks.update(result.get("failed_checks") or [])
+        for tx in rows:
+            try:
+                invoice = (json.loads(tx.payload or "{}").get("invoice") or {})
+                currency = str(invoice.get("currency") or "UNKNOWN").upper()
+                amount = Decimal(str(invoice.get("amount") or "0"))
+                amounts[currency] = amounts.get(currency, Decimal("0")) + amount
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+    total = len(rows)
+    review_count = status_counts.get("review_required", 0)
+    return {
+        "period": {
+            "from_date": from_date.isoformat() if from_date else None,
+            "to_date": to_date.isoformat() if to_date else None,
+        },
+        "total_transactions": total,
+        "transactions_truncated": truncated,
+        "status_counts": dict(status_counts),
+        "review_rate": round(review_count / total, 4) if total else 0.0,
+        "invoice_amount_totals_by_currency": {
+            currency: format(amount, "f") for currency, amount in sorted(amounts.items())
+        },
+        "most_common_failed_checks": [
+            {"check": name, "count": count} for name, count in failed_checks.most_common(10)
+        ],
+        "limitations": "Amounts are sums of submitted invoice totals, not cash collected, revenue, receivables balances, or lending exposure.",
     }
 
 
