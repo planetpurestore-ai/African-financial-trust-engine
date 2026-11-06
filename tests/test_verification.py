@@ -94,5 +94,5 @@ def test_conflicting_evidence_is_penalized():
     result = compare_invoice_to_evidence_set(make_invoice(), [make_po(), conflicting_payment])
 
     assert result["status"] == "review_required"
-    assert result["verification_score"] == 85.0
+    assert result["verification_score"] == 70.0
     assert "amount_match" in result["conflicts"]
