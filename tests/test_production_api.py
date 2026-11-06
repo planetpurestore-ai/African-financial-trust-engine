@@ -180,6 +180,8 @@ def test_production_transaction_round_trip(caplog):
     key_list = client.get("/v1/keys", headers={"X-API-Key": api_key})
     assert key_list.status_code == 200
     key_id = key_list.json()["keys"][0]["id"]
+    risk_settings_denied = client.get("/v1/risk-settings", headers={"X-API-Key": api_key})
+    assert risk_settings_denied.status_code == 403
     denied = client.post(
         f"/v1/bank-grade/controls/bootstrap/{key_id}",
         headers={"X-Bootstrap-Token": "wrong-token"},
@@ -191,6 +193,48 @@ def test_production_transaction_round_trip(caplog):
     )
     assert provisioned.status_code == 200
     assert "bank-grade:admin" in provisioned.json()["scopes"]
+
+    default_policy = client.get("/v1/risk-settings", headers={"X-API-Key": api_key})
+    assert default_policy.status_code == 200
+    assert default_policy.json()["settings"]["require_payment_evidence"] is True
+    policy_update = client.put(
+        "/v1/risk-settings",
+        headers={"X-API-Key": api_key},
+        json={"require_payment_evidence": False, "manual_review_amount_threshold": "50000.00"},
+    )
+    assert policy_update.status_code == 200
+    assert policy_update.json()["settings"]["require_payment_evidence"] is False
+
+    # A single matching commercial record is acceptable only because this
+    # institution explicitly configured payment evidence as optional.
+    policy_invoice_number = f"POLICY-{suffix}"
+    policy_transaction = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": f"policy-{suffix}"},
+        json={
+            "invoice": {
+                "invoice_number": policy_invoice_number,
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "7500.00",
+                "currency": "USD",
+                "issue_date": "2026-09-14",
+                "due_date": "2026-10-14",
+            },
+            "evidence": [{
+                "evidence_id": f"PO-POLICY-{suffix}",
+                "evidence_type": "purchase_order",
+                "reference_number": f"PO-POLICY-{suffix}",
+                "supplier_name": "Supplier Ltd",
+                "buyer_name": "Buyer Ltd",
+                "amount": "7500.00",
+                "currency": "USD",
+            }],
+        },
+    )
+    assert policy_transaction.status_code == 201
+    assert policy_transaction.json()["status"] == "verified"
+    assert policy_transaction.json()["verification"]["policy_applied"]["require_payment_evidence"] is False
 
     repeat = client.post(
         "/v1/transactions",
