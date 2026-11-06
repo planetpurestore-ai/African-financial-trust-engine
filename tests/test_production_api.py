@@ -73,6 +73,30 @@ def test_production_transaction_round_trip():
     assert result["verification"]["verification_score"] == 100.0
     assert result["audit_hash"]
 
+    # The independent audit verifier must reproduce the exact persisted hash.
+    chain = client.get("/v1/bank-grade/audits/verify-chain", headers={"X-API-Key": api_key})
+    assert chain.status_code == 200
+    assert chain.json()["valid"] is True
+
+    # A customer-submitted record must never be able to self-declare as
+    # independently verified, even if it supplies plausible provenance text.
+    source = client.post(
+        "/v1/sources/records",
+        headers={"X-API-Key": api_key},
+        json={
+            "provider": "example-bank",
+            "provider_record_id": f"bank-{suffix}",
+            "reference": invoice_number,
+            "amount": "12500.00",
+            "currency": "USD",
+            "authority": "independently_verified",
+            "provenance": {"verification": "provider_direct_query"},
+            "payload": {"amount": "12500.00", "currency": "USD"},
+        },
+    )
+    assert source.status_code == 201
+    assert source.json()["authority"] == "unverified"
+
     repeat = client.post(
         "/v1/transactions",
         headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
