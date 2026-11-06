@@ -82,7 +82,7 @@ def ingest_source_record(
         VALUES (:i,:o,:p,:a,:t,:r,:ref,:amt,:cur,:s,:rec,:dt,:h,:payload,:prov)"""), {
         "i": rid, "o": organization.id, "p": body.provider.strip().lower(), "a": "unverified",
         "t": body.record_type, "r": body.provider_record_id, "ref": body.reference,
-        "amt": body.amount, "cur": body.currency.upper() if body.currency else None,
+        "amt": str(body.amount) if body.amount is not None else None, "cur": body.currency.upper() if body.currency else None,
         "s": body.sender, "rec": body.recipient, "dt": body.occurred_at, "h": digest,
         "payload": json.dumps(body.payload, sort_keys=True, default=str),
         "prov": json.dumps({"submission_channel": "authenticated_api_client", "caller_supplied": body.provenance}, sort_keys=True, default=str),
