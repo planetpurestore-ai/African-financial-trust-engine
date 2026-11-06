@@ -73,6 +73,11 @@ def _aggregate(
         and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency))
         for e in items
     )
+    has_delivery = any(
+        e.evidence_type == "delivery_note"
+        and any(value is not None for value in (e.supplier_name, e.buyer_name, e.amount, e.currency, e.evidence_date))
+        for e in items
+    )
 
     verification_score = core_score
     if has_commercial:
@@ -111,6 +116,7 @@ def _aggregate(
         "supporting_evidence": supporting_evidence,
         "commercial_evidence_present": has_commercial,
         "payment_evidence_present": has_payment,
+        "delivery_evidence_present": has_delivery,
         "policy_applied": {
             "require_commercial_evidence": require_commercial,
             "require_payment_evidence": require_payment,
