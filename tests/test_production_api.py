@@ -97,6 +97,22 @@ def test_production_transaction_round_trip():
     assert source.status_code == 201
     assert source.json()["authority"] == "unverified"
 
+    # First admin scope must be provisioned with the deployment bootstrap secret.
+    key_list = client.get("/v1/keys", headers={"X-API-Key": api_key})
+    assert key_list.status_code == 200
+    key_id = key_list.json()["keys"][0]["id"]
+    denied = client.post(
+        f"/v1/bank-grade/controls/bootstrap/{key_id}",
+        headers={"X-Bootstrap-Token": "wrong-token"},
+    )
+    assert denied.status_code == 403
+    provisioned = client.post(
+        f"/v1/bank-grade/controls/bootstrap/{key_id}",
+        headers={"X-Bootstrap-Token": "test-bootstrap"},
+    )
+    assert provisioned.status_code == 200
+    assert "bank-grade:admin" in provisioned.json()["scopes"]
+
     repeat = client.post(
         "/v1/transactions",
         headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
