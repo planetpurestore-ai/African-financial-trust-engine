@@ -87,6 +87,10 @@ Accepts one invoice and 1–100 unique evidence records. The transaction is pers
 
 The raw token is shown only once. Treat it as a bearer credential. Shared records are read-only and are not evidence of provider-authoritative verification.
 
+### API rate limits
+
+The production middleware applies database-backed fixed one-minute windows. Defaults are 120 requests per minute per API key and 60 requests per minute per anonymous client IP. Configure with `API_RATE_LIMIT_PER_MINUTE` and `ANON_RATE_LIMIT_PER_MINUTE`. Requests over the limit receive HTTP `429` and a `Retry-After` header. Tune these limits with measured partner traffic before a production pilot.
+
 ### Production financial-source evidence
 
 `POST /v1/sources/records` stores customer-submitted financial-source records as `unverified`. Customer-supplied provenance cannot promote a record to independently verified. Use `GET /v1/sources/records` to retrieve stored records and `GET /v1/sources/reconcile/{transaction_id}` for decision-support comparisons. A live provider adapter must establish authority separately.
