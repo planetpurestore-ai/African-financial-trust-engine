@@ -40,6 +40,21 @@ def test_production_transaction_round_trip():
     assert org_response.status_code == 201
     api_key = org_response.json()["api_key"]
 
+    # Upload validation rejects MIME spoofing and accepts small UTF-8 documents.
+    bad_image = client.post(
+        "/v1/documents",
+        headers={"X-API-Key": api_key},
+        files={"file": ("fake.png", b"not-a-png", "image/png")},
+    )
+    assert bad_image.status_code == 415
+    document = client.post(
+        "/v1/documents",
+        headers={"X-API-Key": api_key},
+        files={"file": ("invoice.txt", b"Invoice Number: DOC-1001\\nSupplier: Example Ltd", "text/plain")},
+    )
+    assert document.status_code == 201
+    assert document.json()["duplicate"] is False
+
     payload = {
         "invoice": {
             "invoice_number": invoice_number,
@@ -133,3 +148,14 @@ def test_production_transaction_round_trip():
     )
     assert repeat.status_code == 200
     assert repeat.json()["transaction_id"] == result["transaction_id"]
+
+    changed_payload = {
+        **payload,
+        "invoice": {**payload["invoice"], "amount": "13000.00"},
+    }
+    conflict = client.post(
+        "/v1/transactions",
+        headers={"X-API-Key": api_key, "Idempotency-Key": idempotency_key},
+        json=changed_payload,
+    )
+    assert conflict.status_code == 409
